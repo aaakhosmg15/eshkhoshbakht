@@ -4,13 +4,23 @@
  * Respects prefers-reduced-motion.
  */
 (function () {
-  const reduced =
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
   const scene = document.getElementById("scene3d");
   const inner = document.getElementById("scene3dInner");
   if (!scene || !inner) return;
+
+  // نکته‌ی حیاتی: body یه perspective داره (برای افکت‌های خود صحنه)، و طبق
+  // اسپک CSS این باعث میشه body خودش containing block عناصر position:fixed
+  // بشه — یعنی .scene-3d دیگه واقعاً «ثابت به viewport» نمی‌مونه، بلکه با
+  // اسکرول صفحه جابه‌جا میشه (دقیقاً برعکس چیزی که می‌خوایم). برای حلش،
+  // همون اول .scene-3d رو از داخل body می‌کشیم بیرون و می‌ذاریمش کنار body
+  // (بچه‌ی مستقیم html)، جایی که perspective تأثیری روش نداره.
+  if (scene.parentElement === document.body) {
+    document.documentElement.appendChild(scene);
+  }
+
+  const reduced =
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   if (reduced) {
     scene.classList.add("reduced");
