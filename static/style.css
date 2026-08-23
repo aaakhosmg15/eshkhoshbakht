@@ -1249,3 +1249,114 @@ html.tg-miniapp.modal-open {
   /* کمی فشرده‌تر روی موبایل */
   padding: 22px 20px;
 }
+
+
+/* ============================================================
+   Custom soft cursor — gold/teal, mild & dim (desktop only)
+   ============================================================ */
+
+.has-kh-cursor,
+.has-kh-cursor * {
+  cursor: none !important;
+}
+.has-kh-cursor input,
+.has-kh-cursor textarea,
+.has-kh-cursor select,
+.has-kh-cursor [contenteditable="true"] {
+  cursor: text !important;
+}
+
+.kh-cursor {
+  position: fixed;
+  inset: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 99990;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.kh-cursor.is-visible {
+  opacity: 1;
+}
+
+.kh-cursor-blob {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%,
+      rgba(212, 175, 55, 0.22) 0%,
+      rgba(45, 212, 191, 0.10) 42%,
+      transparent 70%);
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  will-change: transform;
+  opacity: 0.85;
+}
+
+.kh-cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow:
+    0 0 12px rgba(212, 175, 55, 0.15),
+    inset 0 0 8px rgba(45, 212, 191, 0.08);
+  will-change: transform;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.kh-cursor.is-hover .kh-cursor-ring {
+  border-color: rgba(237, 201, 74, 0.55);
+  box-shadow:
+    0 0 18px rgba(212, 175, 55, 0.28),
+    inset 0 0 10px rgba(45, 212, 191, 0.12);
+}
+
+.kh-cursor-core {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(237, 201, 74, 0.75);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.4);
+  will-change: transform;
+}
+
+.kh-cursor.is-hover .kh-cursor-core {
+  background: rgba(45, 212, 191, 0.7);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.35);
+}
+
+.kh-cursor.is-hover .kh-cursor-blob {
+  background:
+    radial-gradient(circle at 35% 35%,
+      rgba(212, 175, 55, 0.32) 0%,
+      rgba(45, 212, 191, 0.16) 45%,
+      transparent 72%);
+}
+
+@media (pointer: coarse), (max-width: 900px) {
+  .kh-cursor { display: none !important; }
+  .has-kh-cursor,
+  .has-kh-cursor * {
+    cursor: auto !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kh-cursor { display: none !important; }
+  .has-kh-cursor,
+  .has-kh-cursor * {
+    cursor: auto !important;
+  }
+}
