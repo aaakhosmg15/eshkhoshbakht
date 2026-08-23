@@ -79,6 +79,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   perspective: 1200px;
+
+  isolation: isolate; /* stacking: scene behind UI */
 }
 
 /* Ambient volumetric lighting */
@@ -971,6 +973,8 @@ code.url {
   pointer-events: none;
   overflow: hidden;
   background: #010309;
+  /* صحنه همیشه پشت محتوای پنل بماند */
+  isolation: isolate;
 }
 
 /* Deep space base */
@@ -1080,8 +1084,8 @@ code.url {
   background: radial-gradient(
     ellipse 70% 65% at 50% 48%,
     transparent 30%,
-    rgba(0, 0, 0, 0.45) 70%,
-    rgba(0, 0, 0, 0.82) 100%
+    rgba(0, 0, 0, 0.35) 70%,
+    rgba(0, 0, 0, 0.7) 100%
   );
   pointer-events: none;
 }
@@ -1252,9 +1256,13 @@ code.url {
 .app-root,
 .cart-bar,
 .mobile-nav,
-.mobile-bar {
+.mobile-bar,
+.login-card {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+}
+.app-root {
+  isolation: isolate;
 }
 .toast {
   position: fixed;

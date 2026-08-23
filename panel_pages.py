@@ -74,7 +74,7 @@ def _login_html(error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar2"/>
 </head>
 <body class="login-body">
 <!-- Solar System background (visual only) -->
@@ -111,8 +111,8 @@ def _login_html(error: str = "") -> str:
     {password_form}
     {disabled_notice}
   </div>
-<script src="/panel/static/scene3d.js?v=20260823solar"></script>
-<script src="/panel/static/cursor.js?v=20260823solar"></script>
+<script src="/panel/static/scene3d.js?v=20260823solar2"></script>
+<script src="/panel/static/cursor.js?v=20260823solar2"></script>
 </body>
 </html>"""
 
