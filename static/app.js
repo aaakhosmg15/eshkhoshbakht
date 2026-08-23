@@ -118,15 +118,28 @@ function openModal(html) {
   modalRoot.addEventListener("click", (e) => { if (e.target === modalRoot) closeModal(); });
   // مهم: body دارای perspective است و containing block برای position:fixed می‌شود؛
   // مودال را مستقیم زیر <html> می‌گذاریم تا واقعاً روی کل viewport وسط‌چین بماند
-  // و با اسکرول صفحه پایین نرود.
+  // و با اسکرول صفحه پایین نرود — هم در مرورگر هم در Mini App تلگرام.
   document.documentElement.appendChild(modalRoot);
   document.documentElement.classList.add("modal-open");
   document.body.classList.add("modal-open");
+
+  // Mini App: تمام‌صفحه + جلوگیری از gesture اسکرول پشت مودال
+  if (TG) {
+    try { TG.expand(); } catch (e) {}
+    try {
+      if (TG.disableVerticalSwipes) TG.disableVerticalSwipes();
+    } catch (e) {}
+  }
 }
 function closeModal() {
   if (modalRoot) { modalRoot.remove(); modalRoot = null; }
   document.documentElement.classList.remove("modal-open");
   document.body.classList.remove("modal-open");
+  if (TG) {
+    try {
+      if (TG.enableVerticalSwipes) TG.enableVerticalSwipes();
+    } catch (e) {}
+  }
 }
 
 // ---------- بارگذاری اولیه ----------
@@ -1124,8 +1137,10 @@ if (TG) {
   try {
     TG.ready();
     TG.expand();
-    TG.setHeaderColor("#070f1a");
-    TG.setBackgroundColor("#070f1a");
+    document.documentElement.classList.add("tg-miniapp");
+    document.body.classList.add("tg-miniapp");
+    TG.setHeaderColor("#05080f");
+    TG.setBackgroundColor("#05080f");
   } catch (e) { /* نسخه‌های قدیمی کلاینت تلگرام ممکنه این متدها رو نداشته باشن */ }
 }
 
