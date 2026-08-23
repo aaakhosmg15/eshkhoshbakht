@@ -74,13 +74,15 @@ def _login_html(error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar2"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar3d3d"/>
 </head>
 <body class="login-body">
-<!-- Solar System background (visual only) -->
+<!-- Solar System 3D background (visual only) -->
 <div class="scene-3d" id="scene3d" aria-hidden="true">
   <div class="space-deep"></div>
-  <div class="space-stars"></div>
+  <div class="space-stars far"></div>
+  <div class="space-stars mid"></div>
+  <div class="space-stars near"></div>
   <div class="space-nebula n-a"></div>
   <div class="space-nebula n-b"></div>
   <div class="space-blackhole"></div>
@@ -89,11 +91,13 @@ def _login_html(error: str = "") -> str:
     <div class="sun">
       <div class="sun-core"></div>
       <div class="sun-corona"></div>
+      <div class="sun-flare"></div>
     </div>
     <div class="orbit o-mercury" style="--orbit-dur:12s"><div class="planet-wrap"><div class="planet p-mercury"></div></div></div>
     <div class="orbit o-venus" style="--orbit-dur:19s"><div class="planet-wrap"><div class="planet p-venus"></div></div></div>
     <div class="orbit o-earth" style="--orbit-dur:30s"><div class="planet-wrap"><div class="planet p-earth"></div></div></div>
     <div class="orbit o-mars" style="--orbit-dur:56s"><div class="planet-wrap"><div class="planet p-mars"></div></div></div>
+    <div class="asteroid-belt" style="--orbit-dur:100s"></div>
     <div class="orbit o-jupiter" style="--orbit-dur:90s"><div class="planet-wrap"><div class="planet p-jupiter"></div></div></div>
     <div class="orbit o-saturn" style="--orbit-dur:140s"><div class="planet-wrap"><div class="planet p-saturn"><span class="saturn-ring"></span></div></div></div>
     <div class="orbit o-uranus" style="--orbit-dur:200s"><div class="planet-wrap"><div class="planet p-uranus"></div></div></div>
@@ -102,7 +106,7 @@ def _login_html(error: str = "") -> str:
   <div class="space-vignette"></div>
 </div>
 
-  <div class="login-card">
+<div class="login-card">
     <div class="login-logo">{_LOGO_SVG}</div>
     <h1>خوشبخت</h1>
     <p class="tagline" style="margin-bottom:4px">پنل مدیریت تونل و اشتراک</p>
@@ -111,8 +115,8 @@ def _login_html(error: str = "") -> str:
     {password_form}
     {disabled_notice}
   </div>
-<script src="/panel/static/scene3d.js?v=20260823solar2"></script>
-<script src="/panel/static/cursor.js?v=20260823solar2"></script>
+<script src="/panel/static/scene3d.js?v=20260823solar3d3d"></script>
+<script src="/panel/static/cursor.js?v=20260823solar3d3d"></script>
 </body>
 </html>"""
 

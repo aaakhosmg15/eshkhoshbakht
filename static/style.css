@@ -961,9 +961,9 @@ code.url {
 }
 
 /* ============================================================
-   Solar System Scene — visual-only background
-   Planets orbit with relative speeds inspired by real periods
-   Sun lighting, planet dark sides, deep space + stars
+   Solar System Scene — TRUE 3D (visual only)
+   Tilted orbital plane · perspective · layered stars · asteroid belt
+   Does not affect panel layout or interactions
    ============================================================ */
 
 .scene-3d {
@@ -972,207 +972,233 @@ code.url {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: #010309;
-  /* صحنه همیشه پشت محتوای پنل بماند */
+  background: #010208;
   isolation: isolate;
+  perspective: 1100px;
+  perspective-origin: 50% 42%;
 }
 
-/* Deep space base */
 .space-deep {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 50% 45%, #0a1528 0%, #03060e 45%, #000000 100%);
+    radial-gradient(ellipse 90% 70% at 50% 48%, #0b1730 0%, #040814 40%, #000 100%);
 }
 
-/* Stars */
+/* Star layers (parallax depth) */
 .space-stars {
   position: absolute;
-  inset: 0;
+  inset: -5%;
   overflow: hidden;
+  will-change: transform;
 }
+.space-stars.far { opacity: 0.55; }
+.space-stars.mid { opacity: 0.75; }
+.space-stars.near { opacity: 0.95; }
 .space-stars .star {
   position: absolute;
   border-radius: 50%;
   background: #e8f0ff;
-  box-shadow: 0 0 4px rgba(200, 220, 255, 0.5);
+  box-shadow: 0 0 3px rgba(200, 220, 255, 0.45);
   animation: star-twinkle ease-in-out infinite;
 }
+.star-near {
+  box-shadow: 0 0 6px rgba(220, 235, 255, 0.7);
+}
 @keyframes star-twinkle {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.15); }
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
 }
 
-/* Soft nebulae */
 .space-nebula {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.35;
+  filter: blur(70px);
+  opacity: 0.32;
   mix-blend-mode: screen;
 }
 .space-nebula.n-a {
-  width: 55vmax;
-  height: 40vmax;
-  top: -10%;
-  left: -15%;
-  background: radial-gradient(circle, rgba(60, 40, 120, 0.55) 0%, transparent 70%);
+  width: 55vmax; height: 40vmax;
+  top: -12%; left: -18%;
+  background: radial-gradient(circle, rgba(70, 40, 140, 0.5) 0%, transparent 70%);
 }
 .space-nebula.n-b {
-  width: 45vmax;
-  height: 35vmax;
-  bottom: -5%;
-  right: -10%;
-  background: radial-gradient(circle, rgba(20, 60, 90, 0.45) 0%, transparent 70%);
+  width: 48vmax; height: 36vmax;
+  bottom: -8%; right: -14%;
+  background: radial-gradient(circle, rgba(20, 70, 100, 0.4) 0%, transparent 70%);
 }
 
-/* Distant black hole */
 .space-blackhole {
   position: absolute;
-  width: 18vmax;
-  height: 18vmax;
-  top: 12%;
-  right: 8%;
+  width: 16vmax; height: 16vmax;
+  top: 10%; right: 6%;
   border-radius: 50%;
   background:
     radial-gradient(circle at 50% 50%,
-      #000 0%,
-      #000 28%,
-      rgba(80, 40, 140, 0.35) 38%,
-      rgba(40, 20, 80, 0.15) 52%,
+      #000 0%, #000 26%,
+      rgba(90, 45, 160, 0.4) 36%,
+      rgba(40, 20, 80, 0.12) 52%,
       transparent 70%);
-  box-shadow:
-    0 0 40px rgba(100, 60, 180, 0.15),
-    0 0 80px rgba(30, 10, 60, 0.2);
-  opacity: 0.7;
-  animation: bh-pulse 16s ease-in-out infinite;
+  box-shadow: 0 0 50px rgba(100, 60, 180, 0.12);
+  opacity: 0.65;
+  transform: translateZ(-200px);
+  animation: bh-pulse 18s ease-in-out infinite;
 }
 .space-blackhole::after {
   content: "";
   position: absolute;
-  inset: 22%;
+  inset: 20%;
   border-radius: 50%;
-  border: 1px solid rgba(180, 140, 255, 0.12);
-  transform: rotateX(72deg) scaleX(1.6);
-  box-shadow: 0 0 20px rgba(140, 100, 255, 0.15);
+  border: 1px solid rgba(180, 140, 255, 0.14);
+  transform: rotateX(70deg) scaleX(1.7);
+  box-shadow: 0 0 16px rgba(140, 100, 255, 0.12);
 }
 @keyframes bh-pulse {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.04); }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.75; }
 }
 
-/* Light field from sun — corners stay dark */
+/* نور خورشید — گوشه‌ها تاریک */
 .sun-light-field {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: radial-gradient(
-    circle at 50% 48%,
-    rgba(255, 200, 80, 0.14) 0%,
-    rgba(212, 175, 55, 0.06) 18%,
-    rgba(10, 20, 40, 0.15) 38%,
-    rgba(0, 0, 0, 0.55) 62%,
+    circle at 50% 46%,
+    rgba(255, 200, 90, 0.16) 0%,
+    rgba(212, 175, 55, 0.07) 16%,
+    rgba(8, 16, 32, 0.2) 36%,
+    rgba(0, 0, 0, 0.55) 60%,
     rgba(0, 0, 0, 0.88) 100%
   );
-  z-index: 2;
   pointer-events: none;
 }
-
 .space-vignette {
   position: absolute;
   inset: 0;
   z-index: 3;
   background: radial-gradient(
-    ellipse 70% 65% at 50% 48%,
-    transparent 30%,
-    rgba(0, 0, 0, 0.35) 70%,
-    rgba(0, 0, 0, 0.7) 100%
+    ellipse 72% 68% at 50% 46%,
+    transparent 28%,
+    rgba(0, 0, 0, 0.4) 68%,
+    rgba(0, 0, 0, 0.78) 100%
   );
   pointer-events: none;
 }
 
-/* Solar system plane */
+/* ----- منظومه سه‌بعدی ----- */
 .scene-3d-inner.solar-system {
   position: absolute;
-  top: 50%;
+  top: 52%;
   left: 50%;
-  width: min(92vmin, 720px);
-  height: min(92vmin, 720px);
-  transform: translate(-50%, -50%);
+  width: min(96vmin, 780px);
+  height: min(96vmin, 780px);
+  transform: translate3d(-50%, -50%, 0) rotateX(58deg) rotateZ(-14deg);
   transform-style: preserve-3d;
   will-change: transform;
   z-index: 1;
 }
 
-/* Sun */
+/* خورشید */
 .sun {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 52px;
-  height: 52px;
-  margin: -26px 0 0 -26px;
-  z-index: 10;
+  top: 50%; left: 50%;
+  width: 56px; height: 56px;
+  margin: -28px 0 0 -28px;
+  z-index: 20;
+  transform-style: preserve-3d;
+  transform: translateZ(8px);
 }
 .sun-core {
-  width: 100%;
-  height: 100%;
+  width: 100%; height: 100%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 35%,
-      #fff6d0 0%,
-      #ffd060 28%,
-      #f0a020 60%,
-      #c06010 100%);
+    radial-gradient(circle at 32% 32%,
+      #fff8d8 0%, #ffd060 30%, #f09820 62%, #b05010 100%);
   box-shadow:
-    0 0 20px 6px rgba(255, 200, 80, 0.55),
-    0 0 50px 18px rgba(255, 160, 40, 0.25),
-    0 0 90px 36px rgba(212, 175, 55, 0.12);
-  animation: sun-pulse 6s ease-in-out infinite;
+    0 0 24px 8px rgba(255, 200, 80, 0.55),
+    0 0 60px 22px rgba(255, 160, 40, 0.28),
+    0 0 110px 40px rgba(212, 175, 55, 0.12);
+  animation: sun-pulse 7s ease-in-out infinite;
 }
 .sun-corona {
   position: absolute;
-  inset: -18px;
+  inset: -22px;
   border-radius: 50%;
   background: radial-gradient(circle,
-    rgba(255, 200, 100, 0.35) 0%,
-    rgba(255, 160, 40, 0.12) 40%,
+    rgba(255, 200, 100, 0.4) 0%,
+    rgba(255, 150, 40, 0.12) 45%,
     transparent 70%);
-  filter: blur(4px);
-  animation: sun-pulse 6s ease-in-out infinite reverse;
+  filter: blur(5px);
+  animation: sun-pulse 7s ease-in-out infinite reverse;
+}
+.sun-flare {
+  position: absolute;
+  inset: -40px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(255, 200, 100, 0.08) 40deg,
+    transparent 80deg,
+    rgba(255, 160, 60, 0.06) 140deg,
+    transparent 180deg,
+    rgba(255, 200, 100, 0.07) 250deg,
+    transparent 300deg
+  );
+  animation: sun-spin 40s linear infinite;
+  opacity: 0.7;
 }
 @keyframes sun-pulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.05); filter: brightness(1.08); }
+  50% { transform: scale(1.06); filter: brightness(1.1); }
+}
+@keyframes sun-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-/* Orbits */
+/* مدارها — روی صفحه کج‌شده می‌چرخند → حس بیضی سه‌بعدی */
 .orbit {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  border: 1px solid rgba(212, 175, 55, 0.07);
+  top: 50%; left: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.1);
   border-radius: 50%;
   transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
   animation: orbit-spin var(--orbit-dur, 30s) linear infinite;
+  box-shadow: inset 0 0 12px rgba(212, 175, 55, 0.03);
 }
+.orbit::before {
+  /* لبه روشن مدار برای عمق */
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  border-top-color: rgba(255, 220, 140, 0.14);
+  border-right-color: rgba(255, 220, 140, 0.05);
+  pointer-events: none;
+}
+
 .planet-wrap {
   position: absolute;
   top: 0;
   left: 50%;
-  width: 0;
-  height: 0;
-  /* counter-rotate: سمت روشن همیشه رو به خورشید (مرکز) می‌ماند */
+  width: 0; height: 0;
+  transform-style: preserve-3d;
   animation: planet-counter var(--orbit-dur, 30s) linear infinite;
 }
 .planet {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translateZ(6px);
+  transform-style: preserve-3d;
   box-shadow:
-    inset -4px 0 8px rgba(0, 0, 0, 0.65),
-    2px 0 6px rgba(255, 220, 150, 0.12);
+    inset -5px 0 10px rgba(0, 0, 0, 0.7),
+    2px 0 8px rgba(255, 220, 150, 0.15),
+    0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 @keyframes orbit-spin {
@@ -1184,75 +1210,99 @@ code.url {
   to   { transform: rotate(-360deg); }
 }
 
-.o-mercury { width: 18%; height: 18%; }
-.o-venus   { width: 28%; height: 28%; }
-.o-earth   { width: 38%; height: 38%; }
-.o-mars    { width: 48%; height: 48%; }
+.o-mercury { width: 16%; height: 16%; }
+.o-venus   { width: 26%; height: 26%; }
+.o-earth   { width: 36%; height: 36%; }
+.o-mars    { width: 46%; height: 46%; }
 .o-jupiter { width: 62%; height: 62%; }
 .o-saturn  { width: 74%; height: 74%; }
 .o-uranus  { width: 86%; height: 86%; }
-.o-neptune { width: 98%; height: 98%; }
+.o-neptune { width: 97%; height: 97%; }
 
-/* Planet sizes + colors with day/night gradient (sun on the "near-center" side) */
+/* سیاره‌ها */
 .p-mercury {
-  width: 7px; height: 7px;
-  background: radial-gradient(circle at 25% 40%, #e8dcc8 0%, #a09070 45%, #2a2418 100%);
+  width: 8px; height: 8px;
+  background: radial-gradient(circle at 28% 35%, #f0e6d4 0%, #a09070 48%, #1a1510 100%);
 }
 .p-venus {
-  width: 10px; height: 10px;
-  background: radial-gradient(circle at 25% 40%, #f5e6b8 0%, #c4a050 45%, #3a2a10 100%);
+  width: 11px; height: 11px;
+  background: radial-gradient(circle at 28% 35%, #ffe9b8 0%, #c4a050 48%, #2a1e08 100%);
 }
 .p-earth {
-  width: 11px; height: 11px;
-  background: radial-gradient(circle at 25% 40%, #8ec8f0 0%, #2a6a9a 35%, #1a5a3a 55%, #0a1520 100%);
+  width: 12px; height: 12px;
+  background: radial-gradient(circle at 28% 35%, #a0d4f5 0%, #2a6a9a 32%, #1a6a3a 55%, #081018 100%);
 }
 .p-mars {
-  width: 9px; height: 9px;
-  background: radial-gradient(circle at 25% 40%, #f0a070 0%, #b05030 45%, #301808 100%);
+  width: 10px; height: 10px;
+  background: radial-gradient(circle at 28% 35%, #ffb080 0%, #b05030 48%, #200e05 100%);
 }
 .p-jupiter {
-  width: 20px; height: 20px;
-  background: radial-gradient(circle at 25% 40%, #f0d0a0 0%, #c08040 30%, #a06030 55%, #2a1808 100%);
+  width: 22px; height: 22px;
+  background: radial-gradient(circle at 28% 35%, #f5d8a8 0%, #c08040 28%, #a06030 55%, #1a1005 100%);
 }
 .p-saturn {
-  width: 17px; height: 17px;
-  background: radial-gradient(circle at 25% 40%, #f0e0b0 0%, #c0a060 40%, #3a2a10 100%);
+  width: 18px; height: 18px;
+  background: radial-gradient(circle at 28% 35%, #f5e8b8 0%, #c0a060 42%, #2a1e08 100%);
 }
 .p-uranus {
-  width: 13px; height: 13px;
-  background: radial-gradient(circle at 25% 40%, #c0f0f0 0%, #50b0c0 45%, #102830 100%);
+  width: 14px; height: 14px;
+  background: radial-gradient(circle at 28% 35%, #d0f8f8 0%, #50b0c0 48%, #0a1820 100%);
 }
 .p-neptune {
-  width: 12px; height: 12px;
-  background: radial-gradient(circle at 25% 40%, #80b0f0 0%, #3050b0 45%, #0a1028 100%);
+  width: 13px; height: 13px;
+  background: radial-gradient(circle at 28% 35%, #90c0ff 0%, #3050b0 48%, #060c20 100%);
 }
 
 .saturn-ring {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 280%;
-  height: 55%;
-  margin: 0;
-  transform: translate(-50%, -50%) rotateX(68deg);
-  border: 1.5px solid rgba(210, 180, 120, 0.45);
+  top: 50%; left: 50%;
+  width: 300%; height: 52%;
+  transform: translate(-50%, -50%) rotateX(72deg) translateZ(1px);
+  border: 1.5px solid rgba(220, 190, 130, 0.5);
   border-radius: 50%;
-  box-shadow: 0 0 4px rgba(200, 170, 100, 0.2);
+  box-shadow:
+    0 0 6px rgba(200, 170, 100, 0.25),
+    inset 0 0 4px rgba(255, 220, 150, 0.15);
   pointer-events: none;
+}
+
+/* کمربند سیارکی */
+.asteroid-belt {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 54%; height: 54%;
+  transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
+  animation: orbit-spin var(--orbit-dur, 100s) linear infinite;
+  border: 1px dashed rgba(180, 160, 120, 0.06);
+  border-radius: 50%;
+}
+.asteroid {
+  position: absolute;
+  top: 50%; left: 50%;
+  border-radius: 50%;
+  background: #c8b89a;
+  box-shadow: 0 0 2px rgba(200, 180, 140, 0.3);
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--a, 0deg))
+    translateX(var(--r, 50%))
+    translateZ(2px);
 }
 
 /* Reduced motion */
 .scene-3d.reduced .orbit,
 .scene-3d.reduced .planet-wrap,
-.scene-3d.reduced .planet-counter,
+.scene-3d.reduced .asteroid-belt,
 .scene-3d.reduced .sun-core,
 .scene-3d.reduced .sun-corona,
+.scene-3d.reduced .sun-flare,
 .scene-3d.reduced .space-blackhole,
 .scene-3d.reduced .star {
   animation: none !important;
 }
 
-/* Ensure UI stays above the scene */
+/* UI always above scene */
 .app-root,
 .cart-bar,
 .mobile-nav,
@@ -1272,15 +1322,9 @@ code.url {
 .mobile-nav { z-index: 50; }
 .mobile-bar { z-index: 40; }
 
-/* Soften old body gradients so solar scene is visible */
-body::before {
-  opacity: 0.35;
-}
-body::after {
-  opacity: 0.02;
-}
+body::before { opacity: 0.3; }
+body::after { opacity: 0.02; }
 
-/* Login page solar scene */
 .login-body .scene-3d {
   opacity: 1;
 }
