@@ -86,6 +86,8 @@
 
   if (reduced) {
     // tilt ثابت بدون انیمیشن parallax
+    inner.style.setProperty("--solar-tilt", "58deg");
+    inner.style.setProperty("--solar-yaw", "-12deg");
     inner.style.transform =
       "translate3d(-50%, -50%, 0) rotateX(58deg) rotateZ(-12deg)";
     return;
@@ -119,8 +121,11 @@
     const yaw = BASE_YAW + curX * 16;
     const roll = curX * 4;
     const parallaxY = Math.min(scrollY * 0.015, 18);
-    // عمق ملایم با scale
     const zScale = 1 + Math.abs(curX) * 0.03;
+
+    // متغیرها برای billboard کره‌ها (خورشید/سیاره رو به دوربین)
+    inner.style.setProperty("--solar-tilt", tilt.toFixed(2) + "deg");
+    inner.style.setProperty("--solar-yaw", yaw.toFixed(2) + "deg");
 
     inner.style.transform =
       `translate3d(-50%, calc(-50% + ${parallaxY}px), 0) ` +

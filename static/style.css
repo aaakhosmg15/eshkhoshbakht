@@ -1087,6 +1087,7 @@ code.url {
 }
 
 /* ----- منظومه سه‌بعدی ----- */
+/* ----- منظومه سه‌بعدی + کره‌های حجیم ----- */
 .scene-3d-inner.solar-system {
   position: absolute;
   top: 52%;
@@ -1097,86 +1098,124 @@ code.url {
   transform-style: preserve-3d;
   will-change: transform;
   z-index: 1;
+  --solar-tilt: 58deg;
+  --solar-yaw: -14deg;
 }
 
-/* خورشید */
+/* خورشید — کره حجیم چندلایه */
 .sun {
   position: absolute;
   top: 50%; left: 50%;
-  width: 56px; height: 56px;
-  margin: -28px 0 0 -28px;
-  z-index: 20;
+  width: 64px; height: 64px;
+  margin: -32px 0 0 -32px;
+  z-index: 30;
   transform-style: preserve-3d;
-  transform: translateZ(8px);
+  /* billboard: رو به دوربین بماند تا مثل دیسک پهن نشود */
+  transform:
+    translateZ(24px)
+    rotateX(calc(var(--solar-tilt, 58deg) * -1))
+    rotateZ(calc(var(--solar-yaw, -14deg) * -1));
 }
 .sun-core {
+  position: relative;
   width: 100%; height: 100%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 32% 32%,
-      #fff8d8 0%, #ffd060 30%, #f09820 62%, #b05010 100%);
+    radial-gradient(circle at 32% 28%,
+      #ffffff 0%,
+      #fff3c0 12%,
+      #ffd050 32%,
+      #f09018 58%,
+      #a04008 82%,
+      #4a1800 100%);
   box-shadow:
-    0 0 24px 8px rgba(255, 200, 80, 0.55),
-    0 0 60px 22px rgba(255, 160, 40, 0.28),
-    0 0 110px 40px rgba(212, 175, 55, 0.12);
+    inset -10px -6px 18px rgba(80, 20, 0, 0.55),
+    inset 6px 8px 14px rgba(255, 255, 220, 0.45),
+    0 0 20px 6px rgba(255, 200, 80, 0.65),
+    0 0 50px 18px rgba(255, 160, 40, 0.35),
+    0 0 90px 36px rgba(212, 175, 55, 0.18);
   animation: sun-pulse 7s ease-in-out infinite;
+}
+/* لکه / بافت خورشید */
+.sun-core::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 60% 55%, rgba(180, 60, 0, 0.25) 0%, transparent 40%),
+    radial-gradient(circle at 40% 40%, rgba(255, 255, 200, 0.2) 0%, transparent 35%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+/* هایلایت آینه‌ای */
+.sun-core::after {
+  content: "";
+  position: absolute;
+  top: 12%; left: 16%;
+  width: 28%; height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, transparent 70%);
+  filter: blur(1px);
+  pointer-events: none;
 }
 .sun-corona {
   position: absolute;
-  inset: -22px;
+  inset: -28px;
   border-radius: 50%;
   background: radial-gradient(circle,
-    rgba(255, 200, 100, 0.4) 0%,
-    rgba(255, 150, 40, 0.12) 45%,
-    transparent 70%);
-  filter: blur(5px);
+    rgba(255, 210, 100, 0.5) 0%,
+    rgba(255, 150, 40, 0.18) 40%,
+    transparent 68%);
+  filter: blur(6px);
   animation: sun-pulse 7s ease-in-out infinite reverse;
+  pointer-events: none;
 }
 .sun-flare {
   position: absolute;
-  inset: -40px;
+  inset: -48px;
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    rgba(255, 200, 100, 0.08) 40deg,
-    transparent 80deg,
-    rgba(255, 160, 60, 0.06) 140deg,
-    transparent 180deg,
-    rgba(255, 200, 100, 0.07) 250deg,
-    transparent 300deg
+    rgba(255, 200, 100, 0.1) 35deg,
+    transparent 75deg,
+    rgba(255, 160, 60, 0.08) 130deg,
+    transparent 175deg,
+    rgba(255, 200, 100, 0.09) 240deg,
+    transparent 290deg
   );
   animation: sun-spin 40s linear infinite;
-  opacity: 0.7;
+  opacity: 0.75;
+  pointer-events: none;
 }
 @keyframes sun-pulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.06); filter: brightness(1.1); }
+  50% { transform: scale(1.05); filter: brightness(1.12); }
 }
 @keyframes sun-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-/* مدارها — روی صفحه کج‌شده می‌چرخند → حس بیضی سه‌بعدی */
+/* مدارها */
 .orbit {
   position: absolute;
   top: 50%; left: 50%;
-  border: 1px solid rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.11);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   transform-style: preserve-3d;
   animation: orbit-spin var(--orbit-dur, 30s) linear infinite;
-  box-shadow: inset 0 0 12px rgba(212, 175, 55, 0.03);
+  box-shadow: inset 0 0 14px rgba(212, 175, 55, 0.04);
 }
 .orbit::before {
-  /* لبه روشن مدار برای عمق */
   content: "";
   position: absolute;
   inset: -1px;
   border-radius: 50%;
   border: 1px solid transparent;
-  border-top-color: rgba(255, 220, 140, 0.14);
+  border-top-color: rgba(255, 220, 140, 0.16);
   border-right-color: rgba(255, 220, 140, 0.05);
   pointer-events: none;
 }
@@ -1189,16 +1228,49 @@ code.url {
   transform-style: preserve-3d;
   animation: planet-counter var(--orbit-dur, 30s) linear infinite;
 }
+
+/* کره سیاره — billboard + حجم + سایه */
 .planet {
   position: absolute;
   top: 0; left: 0;
   border-radius: 50%;
-  transform: translate(-50%, -50%) translateZ(6px);
   transform-style: preserve-3d;
+  /* خنثی‌کردن tilt صفحه مدار → همیشه دایره/کره روبه‌دوربین */
+  transform:
+    translate(-50%, -50%)
+    rotateX(calc(var(--solar-tilt, 58deg) * -1))
+    rotateZ(calc(var(--solar-yaw, -14deg) * -1))
+    translateZ(14px);
+  /* سایه حجمی + نور از سمت خورشید (تقریبی) */
   box-shadow:
-    inset -5px 0 10px rgba(0, 0, 0, 0.7),
-    2px 0 8px rgba(255, 220, 150, 0.15),
-    0 4px 10px rgba(0, 0, 0, 0.35);
+    inset -6px -2px 12px rgba(0, 0, 0, 0.75),
+    inset 4px 3px 8px rgba(255, 255, 255, 0.18),
+    2px 4px 10px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(255, 200, 120, 0.12);
+}
+/* اتمسفر / لبه نورانی */
+.planet::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 55%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+/* هایلایت براق روی کره */
+.planet::after {
+  content: "";
+  position: absolute;
+  top: 14%; left: 18%;
+  width: 32%; height: 24%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.55) 0%, transparent 70%);
+  filter: blur(0.5px);
+  pointer-events: none;
+  opacity: 0.85;
 }
 
 @keyframes orbit-spin {
@@ -1219,50 +1291,71 @@ code.url {
 .o-uranus  { width: 86%; height: 86%; }
 .o-neptune { width: 97%; height: 97%; }
 
-/* سیاره‌ها */
+/* رنگ‌های حجیم سیاره (گرادیان کروی) */
 .p-mercury {
-  width: 8px; height: 8px;
-  background: radial-gradient(circle at 28% 35%, #f0e6d4 0%, #a09070 48%, #1a1510 100%);
+  width: 11px; height: 11px;
+  background: radial-gradient(circle at 30% 28%,
+    #f5efe4 0%, #c4b49a 28%, #8a7a60 55%, #2a2218 78%, #0a0806 100%);
 }
 .p-venus {
-  width: 11px; height: 11px;
-  background: radial-gradient(circle at 28% 35%, #ffe9b8 0%, #c4a050 48%, #2a1e08 100%);
+  width: 14px; height: 14px;
+  background: radial-gradient(circle at 30% 28%,
+    #fff0c8 0%, #e8c878 25%, #c4a050 50%, #6a4820 75%, #1a1005 100%);
 }
 .p-earth {
-  width: 12px; height: 12px;
-  background: radial-gradient(circle at 28% 35%, #a0d4f5 0%, #2a6a9a 32%, #1a6a3a 55%, #081018 100%);
+  width: 15px; height: 15px;
+  background: radial-gradient(circle at 30% 28%,
+    #c8e8ff 0%, #5a9fd4 18%, #2a7a4a 38%, #1a5080 55%, #0a3040 75%, #020810 100%);
+}
+.p-earth::before {
+  background: radial-gradient(circle at 30% 30%,
+    rgba(140, 200, 255, 0.35) 0%, transparent 50%);
+  box-shadow: inset 0 0 0 1.5px rgba(120, 180, 255, 0.25);
 }
 .p-mars {
-  width: 10px; height: 10px;
-  background: radial-gradient(circle at 28% 35%, #ffb080 0%, #b05030 48%, #200e05 100%);
+  width: 13px; height: 13px;
+  background: radial-gradient(circle at 30% 28%,
+    #ffc090 0%, #e07040 28%, #a04020 55%, #401808 78%, #100502 100%);
 }
 .p-jupiter {
-  width: 22px; height: 22px;
-  background: radial-gradient(circle at 28% 35%, #f5d8a8 0%, #c08040 28%, #a06030 55%, #1a1005 100%);
+  width: 28px; height: 28px;
+  background: radial-gradient(circle at 30% 28%,
+    #ffe8c0 0%, #e0b070 18%, #c08040 35%, #a06830 55%, #604020 75%, #180c02 100%);
 }
 .p-saturn {
-  width: 18px; height: 18px;
-  background: radial-gradient(circle at 28% 35%, #f5e8b8 0%, #c0a060 42%, #2a1e08 100%);
+  width: 24px; height: 24px;
+  background: radial-gradient(circle at 30% 28%,
+    #fff0c8 0%, #e0c880 28%, #c0a060 52%, #705830 75%, #1a1205 100%);
 }
 .p-uranus {
-  width: 14px; height: 14px;
-  background: radial-gradient(circle at 28% 35%, #d0f8f8 0%, #50b0c0 48%, #0a1820 100%);
+  width: 18px; height: 18px;
+  background: radial-gradient(circle at 30% 28%,
+    #e0ffff 0%, #90d8e0 28%, #40a0b0 52%, #186070 75%, #041018 100%);
 }
 .p-neptune {
-  width: 13px; height: 13px;
-  background: radial-gradient(circle at 28% 35%, #90c0ff 0%, #3050b0 48%, #060c20 100%);
+  width: 17px; height: 17px;
+  background: radial-gradient(circle at 30% 28%,
+    #b0d0ff 0%, #5080e0 28%, #2848a0 52%, #102060 75%, #020410 100%);
 }
 
 .saturn-ring {
   position: absolute;
   top: 50%; left: 50%;
-  width: 300%; height: 52%;
-  transform: translate(-50%, -50%) rotateX(72deg) translateZ(1px);
-  border: 1.5px solid rgba(220, 190, 130, 0.5);
+  width: 280%; height: 48%;
+  transform: translate(-50%, -50%) rotateX(75deg) translateZ(2px);
+  border: 2px solid rgba(230, 200, 140, 0.55);
   border-radius: 50%;
   box-shadow:
-    0 0 6px rgba(200, 170, 100, 0.25),
-    inset 0 0 4px rgba(255, 220, 150, 0.15);
+    0 0 8px rgba(200, 170, 100, 0.3),
+    inset 0 0 6px rgba(255, 220, 150, 0.2);
+  pointer-events: none;
+}
+.saturn-ring::before {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 170, 110, 0.35);
   pointer-events: none;
 }
 
@@ -1280,14 +1373,17 @@ code.url {
 .asteroid {
   position: absolute;
   top: 50%; left: 50%;
-  border-radius: 50%;
-  background: #c8b89a;
-  box-shadow: 0 0 2px rgba(200, 180, 140, 0.3);
+  border-radius: 40% 60% 50% 50%;
+  background: radial-gradient(circle at 30% 30%, #e0d0b0 0%, #8a7a60 60%, #2a2218 100%);
+  box-shadow:
+    inset -1px -1px 2px rgba(0,0,0,0.6),
+    0 0 3px rgba(200, 180, 140, 0.25);
   transform:
     translate(-50%, -50%)
     rotate(var(--a, 0deg))
     translateX(var(--r, 50%))
-    translateZ(2px);
+    translateZ(3px)
+    rotateX(calc(var(--solar-tilt, 58deg) * -1));
 }
 
 /* Reduced motion */
