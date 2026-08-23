@@ -74,27 +74,32 @@ def _login_html(error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260823cursor"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar"/>
 </head>
 <body class="login-body">
-<!-- 3D Tunnel background -->
+<!-- Solar System background (visual only) -->
 <div class="scene-3d" id="scene3d" aria-hidden="true">
-  <div class="scene-3d-inner" id="scene3dInner">
-    <div class="tunnel tunnel-1"></div>
-    <div class="tunnel tunnel-2"></div>
-    <div class="tunnel tunnel-3"></div>
-    <div class="tunnel tunnel-4"></div>
-    <div class="tunnel tunnel-5"></div>
-    <div class="net-grid"></div>
-    <div class="node n1"></div>
-    <div class="node n2"></div>
-    <div class="node n3"></div>
-    <div class="node n4"></div>
-    <div class="node n5"></div>
-    <div class="node n6"></div>
-    <div class="beam beam-1"></div>
-    <div class="beam beam-2"></div>
+  <div class="space-deep"></div>
+  <div class="space-stars"></div>
+  <div class="space-nebula n-a"></div>
+  <div class="space-nebula n-b"></div>
+  <div class="space-blackhole"></div>
+  <div class="sun-light-field"></div>
+  <div class="scene-3d-inner solar-system" id="scene3dInner">
+    <div class="sun">
+      <div class="sun-core"></div>
+      <div class="sun-corona"></div>
+    </div>
+    <div class="orbit o-mercury" style="--orbit-dur:12s"><div class="planet-wrap"><div class="planet p-mercury"></div></div></div>
+    <div class="orbit o-venus" style="--orbit-dur:19s"><div class="planet-wrap"><div class="planet p-venus"></div></div></div>
+    <div class="orbit o-earth" style="--orbit-dur:30s"><div class="planet-wrap"><div class="planet p-earth"></div></div></div>
+    <div class="orbit o-mars" style="--orbit-dur:56s"><div class="planet-wrap"><div class="planet p-mars"></div></div></div>
+    <div class="orbit o-jupiter" style="--orbit-dur:90s"><div class="planet-wrap"><div class="planet p-jupiter"></div></div></div>
+    <div class="orbit o-saturn" style="--orbit-dur:140s"><div class="planet-wrap"><div class="planet p-saturn"><span class="saturn-ring"></span></div></div></div>
+    <div class="orbit o-uranus" style="--orbit-dur:200s"><div class="planet-wrap"><div class="planet p-uranus"></div></div></div>
+    <div class="orbit o-neptune" style="--orbit-dur:260s"><div class="planet-wrap"><div class="planet p-neptune"></div></div></div>
   </div>
+  <div class="space-vignette"></div>
 </div>
 
   <div class="login-card">
@@ -106,8 +111,8 @@ def _login_html(error: str = "") -> str:
     {password_form}
     {disabled_notice}
   </div>
-<script src="/panel/static/scene3d.js?v=20260823cursor"></script>
-<script src="/panel/static/cursor.js?v=20260823cursor"></script>
+<script src="/panel/static/scene3d.js?v=20260823solar"></script>
+<script src="/panel/static/cursor.js?v=20260823solar"></script>
 </body>
 </html>"""
 
