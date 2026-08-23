@@ -114,12 +114,19 @@ function openModal(html) {
   closeModal();
   modalRoot = document.createElement("div");
   modalRoot.className = "modal-backdrop";
-  modalRoot.innerHTML = `<div class="modal">${html}</div>`;
+  modalRoot.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
   modalRoot.addEventListener("click", (e) => { if (e.target === modalRoot) closeModal(); });
-  document.body.appendChild(modalRoot);
+  // مهم: body دارای perspective است و containing block برای position:fixed می‌شود؛
+  // مودال را مستقیم زیر <html> می‌گذاریم تا واقعاً روی کل viewport وسط‌چین بماند
+  // و با اسکرول صفحه پایین نرود.
+  document.documentElement.appendChild(modalRoot);
+  document.documentElement.classList.add("modal-open");
+  document.body.classList.add("modal-open");
 }
 function closeModal() {
   if (modalRoot) { modalRoot.remove(); modalRoot = null; }
+  document.documentElement.classList.remove("modal-open");
+  document.body.classList.remove("modal-open");
 }
 
 // ---------- بارگذاری اولیه ----------
