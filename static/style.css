@@ -393,20 +393,22 @@ a:hover { color: var(--gold-bright); }
   .app-layout { flex-direction: column; }
 }
 
-/* ========== Buttons — Gooey / dark glass (inspired by speed-dial) ========== */
+/* ========== Buttons — Liquid / Gooey (speed-dial style) ========== */
 /*
-  حس ویدیو: سطح تیره شیشه‌ای، بوردر نازک روشن، درخشش رنگی روی هاور،
-  انیمیشن فنری، و برای خوشهٔ دکمه‌های کوچک افکت چسبنده (goo filter).
+  حس ویدیو: دایره/قرص تیره، درخشش رنگی، morph مایع روی هاور،
+  و در خوشه‌ها فیلتر SVG gooey برای چسبیدن دکمه‌ها به هم.
 */
 
-.btn {
+.btn,
+button.btn,
+.login-btn {
   border: 1px solid rgba(255, 255, 255, 0.14);
   cursor: pointer;
-  background: rgba(22, 28, 40, 0.85);
+  background: rgba(20, 26, 38, 0.92);
   color: var(--text);
   font-weight: 600;
-  padding: 11px 18px;
-  border-radius: 999px; /* pill مثل دکمه‌های دایره‌ای ویدیو */
+  padding: 11px 20px;
+  border-radius: 999px;
   font-size: 0.86rem;
   font-family: inherit;
   white-space: nowrap;
@@ -416,138 +418,134 @@ a:hover { color: var(--gold-bright); }
   justify-content: center;
   position: relative;
   isolation: isolate;
+  overflow: visible;
   transition:
-    transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-    box-shadow 0.28s var(--ease),
-    border-color 0.28s var(--ease),
-    background 0.28s var(--ease),
-    color 0.2s var(--ease);
+    transform 0.45s cubic-bezier(0.34, 1.55, 0.64, 1),
+    border-radius 0.55s cubic-bezier(0.34, 1.2, 0.64, 1),
+    box-shadow 0.35s ease,
+    border-color 0.3s ease,
+    background 0.3s ease,
+    color 0.2s ease;
   box-shadow:
-    0 0 0 0 transparent,
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 4px 14px rgba(0, 0, 0, 0.25);
   -webkit-tap-highlight-color: transparent;
 }
+
 .btn::before {
-  /* حلقهٔ نئون پشت دکمه */
   content: "";
   position: absolute;
-  inset: -2px;
+  inset: 0;
   border-radius: inherit;
-  background: transparent;
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  background: radial-gradient(circle at 30% 30%,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 55%);
+  opacity: 0.5;
+  transition: opacity 0.35s ease, transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1);
   pointer-events: none;
+  z-index: 0;
 }
-.btn:hover {
-  transform: scale(1.06);
+.btn > * { position: relative; z-index: 1; }
+
+.btn:hover,
+.btn:focus-visible {
+  transform: scale(1.08);
+  border-radius: 42% 58% 52% 48% / 48% 42% 58% 52%;
   color: #fff;
-  border-color: rgba(212, 175, 55, 0.65);
-  background: rgba(28, 36, 52, 0.95);
+  border-color: rgba(212, 175, 55, 0.7);
+  background: rgba(28, 34, 50, 0.98);
   box-shadow:
-    0 0 0 1px rgba(212, 175, 55, 0.25),
-    0 0 22px rgba(212, 175, 55, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 0 0 1px rgba(212, 175, 55, 0.3),
+    0 0 28px rgba(212, 175, 55, 0.4),
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
-.btn:hover::before {
-  opacity: 1;
-  box-shadow: 0 0 28px 2px rgba(212, 175, 55, 0.35);
-}
+.btn:hover::before { opacity: 1; transform: scale(1.15); }
 .btn:active {
-  transform: scale(0.96);
-  transition-duration: 0.1s;
+  transform: scale(0.94);
+  border-radius: 60% 40% 55% 45% / 45% 55% 40% 60%;
+  transition-duration: 0.12s;
 }
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none !important;
+  border-radius: 999px !important;
   box-shadow: none !important;
-  border-color: rgba(255, 255, 255, 0.08);
 }
-.btn:disabled::before { display: none; }
 
-/* Primary CTA — کمی طلایی‌تر بدون پر شدن کامل */
 .btn:not(.btn-sm):not(.btn-outline):not(.btn-ghost):not(.btn-danger) {
-  border-color: rgba(212, 175, 55, 0.35);
+  border-color: rgba(212, 175, 55, 0.4);
   color: var(--gold-bright);
 }
 .btn:not(.btn-sm):not(.btn-outline):not(.btn-ghost):not(.btn-danger):hover {
   color: #fff8e0;
-  border-color: rgba(212, 175, 55, 0.85);
+  border-color: rgba(237, 201, 74, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(237, 201, 74, 0.35),
+    0 0 32px rgba(212, 175, 55, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
-/* Small / icon actions — نزدیک به speed-dial دایره‌ای */
 .btn-sm {
   padding: 8px 12px;
   font-size: 0.76rem;
-  font-weight: 600;
-  min-height: 34px;
+  min-height: 36px;
   border-radius: 999px;
-  background: rgba(18, 24, 36, 0.9);
+  background: rgba(16, 22, 34, 0.95);
   color: var(--text-secondary);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .btn-sm:hover {
+  transform: scale(1.14);
+  border-radius: 40% 60% 55% 45% / 55% 40% 60% 45%;
   color: #fff;
-  border-color: rgba(212, 175, 55, 0.55);
-  background: rgba(24, 32, 48, 0.98);
-  transform: scale(1.1);
+  border-color: rgba(212, 175, 55, 0.65);
   box-shadow:
-    0 0 18px rgba(212, 175, 55, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 20px rgba(212, 175, 55, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* فقط آیکون (بدون متن زیاد) کمی گردتر */
-.btn-sm:not(:has(span:not(.icon))):has(.icon) {
-  width: 36px;
-  height: 36px;
+.btn-sm:not(:has(span:not(.icon))):has(.icon),
+.btn-sm.icon-only {
+  width: 38px;
+  height: 38px;
   padding: 0;
   border-radius: 50%;
 }
+.btn-sm:not(:has(span:not(.icon))):has(.icon):hover,
+.btn-sm.icon-only:hover {
+  border-radius: 42% 58% 48% 52% / 52% 42% 58% 48%;
+}
 
 .btn-outline {
-  background: rgba(12, 18, 28, 0.5);
+  background: rgba(10, 16, 26, 0.55);
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: none;
-  font-weight: 600;
 }
 .btn-outline:hover {
-  background: rgba(22, 30, 44, 0.9);
-  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(20, 28, 42, 0.95);
+  border-color: rgba(45, 212, 191, 0.6);
   color: #fff;
-  box-shadow: 0 0 18px rgba(45, 212, 191, 0.22);
-}
-.btn-outline:hover::before {
-  box-shadow: 0 0 24px 2px rgba(45, 212, 191, 0.25);
+  box-shadow: 0 0 24px rgba(45, 212, 191, 0.28);
+  border-radius: 45% 55% 50% 50% / 50% 45% 55% 50%;
 }
 
 .btn-danger {
-  background: rgba(40, 16, 20, 0.85);
+  background: rgba(36, 14, 18, 0.9);
   color: var(--danger);
-  border-color: rgba(240, 113, 120, 0.4);
-  box-shadow: none;
+  border-color: rgba(240, 113, 120, 0.45);
 }
 .btn-danger:hover {
   color: #fff;
-  border-color: rgba(240, 113, 120, 0.85);
-  background: rgba(60, 18, 24, 0.95);
-  box-shadow: 0 0 22px rgba(240, 113, 120, 0.4);
-}
-.btn-danger:hover::before {
-  box-shadow: 0 0 26px 2px rgba(240, 113, 120, 0.35);
-}
-.btn-sm.btn-danger {
-  background: rgba(40, 16, 20, 0.75);
-  color: var(--danger);
-  border-color: rgba(240, 113, 120, 0.35);
-  box-shadow: none;
+  border-color: rgba(240, 113, 120, 0.9);
+  background: rgba(55, 16, 22, 0.98);
+  box-shadow: 0 0 26px rgba(240, 113, 120, 0.45);
+  border-radius: 48% 52% 45% 55% / 55% 45% 55% 45%;
 }
 .btn-sm.btn-danger:hover {
-  color: #fff;
-  border-color: rgba(240, 113, 120, 0.8);
-  box-shadow: 0 0 16px rgba(240, 113, 120, 0.35);
+  box-shadow: 0 0 18px rgba(240, 113, 120, 0.4);
 }
 
 .btn-ghost {
@@ -555,75 +553,132 @@ a:hover { color: var(--gold-bright); }
   color: var(--text-secondary);
   box-shadow: none;
   border: 1px solid transparent;
-  font-weight: 500;
 }
 .btn-ghost:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 40% 60% 50% 50% / 50% 40% 60% 50%;
   box-shadow: none;
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
-.btn-ghost:hover::before { opacity: 0; }
 
-/* خوشهٔ دکمه‌ها — فیلتر gooey (مثل speed dial) */
+/* خوشه‌های چسبنده — گوئی واقعی مثل ویدیو */
 .action-bar,
 .config-actions,
 .modal-actions {
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
-/* فقط خوشهٔ آیکون‌ها — فیلتر متن دکمه‌های برچسب‌دار را تار می‌کند */
-.config-actions.gooey {
+
+.config-actions,
+.gooey-group.icons {
   filter: url(#gooey);
+  gap: 6px;
 }
-.config-actions.gooey .btn-sm {
-  /* کمی فاصله کمتر تا مایع بینشان بهتر دیده شود */
-  margin: 0 1px;
-}
-
-/* بدون فیلتر روی مودال تا متن واضح بماند؛ فقط درخشش */
-.modal-actions .btn {
-  /* کمی فشرده‌تر داخل مودال */
-  padding: 10px 16px;
+.config-actions .btn-sm,
+.gooey-group.icons .btn-sm {
+  margin: 0;
+  background: rgba(24, 30, 44, 1);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* login button */
+.action-bar,
+.modal-actions,
+.gooey-group {
+  filter: url(#gooey-soft);
+}
+.action-bar .btn,
+.modal-actions .btn,
+.gooey-group .btn {
+  background: rgba(22, 28, 40, 1);
+}
+
+.action-bar .btn:hover,
+.modal-actions .btn:hover,
+.config-actions .btn-sm:hover {
+  z-index: 2;
+}
+
 .login-btn {
   border-radius: 999px !important;
+  width: 100%;
+  margin-top: 8px;
+}
+.login-btn:hover {
+  border-radius: 40% 60% 55% 45% / 55% 40% 60% 45% !important;
 }
 
-/* nav items — همان زبان بصری */
 .nav-item {
   border-radius: 999px !important;
   border: 1px solid transparent;
+  transition:
+    transform 0.4s cubic-bezier(0.34, 1.45, 0.64, 1),
+    border-radius 0.5s cubic-bezier(0.34, 1.2, 0.64, 1),
+    background 0.25s ease,
+    color 0.2s ease,
+    box-shadow 0.3s ease !important;
 }
 .nav-item:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 16px rgba(212, 175, 55, 0.12);
+  transform: scale(1.04);
+  border-radius: 40% 60% 50% 50% / 55% 45% 55% 45% !important;
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.2);
 }
 .nav-item.active {
-  border-radius: 999px !important;
-  box-shadow: 0 0 20px rgba(212, 175, 55, 0.25) !important;
+  border-color: rgba(212, 175, 55, 0.4) !important;
 }
 
-/* mobile nav — دایره‌ای‌تر */
 .mobile-nav button {
-  border-radius: 16px;
-  border: 1px solid transparent;
-  transition: color 0.25s var(--ease), transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-    border-color 0.25s, background 0.25s, box-shadow 0.25s;
+  border-radius: 18px !important;
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1),
+    border-radius 0.4s ease,
+    color 0.2s ease,
+    background 0.25s ease;
 }
 .mobile-nav button:hover,
-.mobile-nav button.active {
-  border-color: rgba(212, 175, 55, 0.35);
-  background: rgba(212, 175, 55, 0.08);
-  box-shadow: 0 0 16px rgba(212, 175, 55, 0.2);
-}
 .mobile-nav button:active {
-  transform: scale(0.9);
+  transform: scale(1.08);
+  border-radius: 40% 60% 50% 50% / 50% 40% 60% 50% !important;
+}
+.mobile-nav button.active { color: var(--gold); }
+
+.back-link {
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1),
+    border-radius 0.45s ease,
+    color 0.2s ease,
+    background 0.25s ease;
+}
+.back-link:hover {
+  transform: scale(1.05);
+  border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-/* Cards with 3D lift */
+@media (prefers-reduced-motion: reduce) {
+  .btn, .btn-sm, .nav-item, .mobile-nav button, .back-link, .login-btn {
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+    transform: none !important;
+    border-radius: 999px !important;
+  }
+  .config-actions,
+  .action-bar,
+  .modal-actions,
+  .gooey-group {
+    filter: none !important;
+  }
+}
+
+
 .card {
   background: rgba(12, 22, 40, 0.58);
   backdrop-filter: blur(14px) saturate(1.2);

@@ -74,9 +74,29 @@ def _login_html(error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260823solar2"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260823liquid"/>
 </head>
 <body class="login-body">
+<!-- Gooey / liquid filter for buttons (visual only) -->
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <filter id="gooey" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10"
+        result="goo"/>
+      <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+    </filter>
+    <filter id="gooey-soft" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -9"
+        result="goo"/>
+      <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+    </filter>
+  </defs>
+</svg>
+
 <!-- Solar System background (visual only) -->
 <div class="scene-3d" id="scene3d" aria-hidden="true">
   <div class="space-deep"></div>
@@ -111,8 +131,8 @@ def _login_html(error: str = "") -> str:
     {password_form}
     {disabled_notice}
   </div>
-<script src="/panel/static/scene3d.js?v=20260823solar2"></script>
-<script src="/panel/static/cursor.js?v=20260823solar2"></script>
+<script src="/panel/static/scene3d.js?v=20260823liquid"></script>
+<script src="/panel/static/cursor.js?v=20260823liquid"></script>
 </body>
 </html>"""
 
