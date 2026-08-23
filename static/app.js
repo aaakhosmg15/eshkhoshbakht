@@ -510,7 +510,7 @@ function renderSubDetail(sub) {
         <span class="badge">${esc(c.protocol)}</span>
         <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
         ${msBadge}
-        <div class="config-actions">
+        <div class="config-actions gooey">
           <button class="btn-sm btn" data-rename="${c.index}" title="رنیم">${icon("edit", "icon-sm")}</button>
         </div>
       </div>
@@ -926,7 +926,7 @@ function renderGenDetail(gen) {
     <div class="config-row">
       <span class="badge">${esc(c.protocol)}</span>
       <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
-      <div class="config-actions">
+      <div class="config-actions gooey">
         <button class="btn-sm btn" data-gen-rename="${c.index}" title="تغییر اسم">${icon("edit", "icon-sm")}</button>
         <button class="btn-sm btn btn-danger" data-gen-del="${c.index}" title="حذف">${icon("trash", "icon-sm")}</button>
       </div>
