@@ -995,7 +995,7 @@ function renderGenDetail(gen) {
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
         <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
         <button class="btn-sm btn btn-danger" id="end-gen-btn">⛔ اتمام اشتراک</button>
-        <button class="btn-sm btn" id="revive-gen-btn">🔄 زنده کردن اشتراک</button>
+        <button class="btn-sm btn btn-revive" id="revive-gen-btn">🔄 زنده کردن اشتراک</button>
         <button class="btn" id="add-to-gen-btn">${icon("plus", "icon-sm")} افزودن کانفیگ از اشتراک دیگر</button>
       </div>
       <div class="qr-box" style="margin-top:16px;text-align:center">

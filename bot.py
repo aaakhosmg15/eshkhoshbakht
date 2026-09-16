@@ -320,10 +320,8 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⏰ تغییر انقضا", callback_data=f"gen_expiry:{gen_id}"),
                 InlineKeyboardButton(text="📝 یادداشت", callback_data=f"gen_note:{gen_id}"),
             ],
-            [
-                InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}"),
-                InlineKeyboardButton(text="🔄 زنده کردن اشتراک", callback_data=f"gen_revive:{gen_id}"),
-            ],
+            [InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}")],
+            [InlineKeyboardButton(text="🔄 زنده کردن اشتراک", callback_data=f"gen_revive:{gen_id}")],
             [InlineKeyboardButton(text="🗑 حذف این اشتراک", callback_data=f"gen_delete:{gen_id}")],
             [InlineKeyboardButton(text="« بازگشت به لیست", callback_data="gens_back")],
         ]
