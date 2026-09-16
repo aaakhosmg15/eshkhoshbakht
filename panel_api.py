@@ -503,6 +503,25 @@ async def api_end_generated(request: web.Request) -> web.Response:
     return web.json_response(_gen_summary(gen, request))
 
 
+async def api_revive_generated(request: web.Request) -> web.Response:
+    """زنده کردن اشتراک سفارشی: همان توکن و کانفیگ‌ها، تاریخ ساخت و انقضای جدید."""
+    gen_id = int(request.match_info["gen_id"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    body = await _json_body(request) or {}
+    try:
+        days = int(body.get("expiry_days") or 0)
+    except (TypeError, ValueError):
+        return _err("expiry_days نامعتبره.")
+    expires_at = None
+    if days > 0:
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    storage.revive_generated_sub(gen_id, request["user_id"], expires_at)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    return web.json_response(_gen_summary(gen, request))
+
+
 async def api_update_generated_note(request: web.Request) -> web.Response:
     """body: { "note": "..." } یا { "clear": true }"""
     gen_id = int(request.match_info["gen_id"])
@@ -583,6 +602,7 @@ def add_routes(app: web.Application) -> None:
     app.router.add_delete("/api/generated/{gen_id}/configs/{idx}", api_delete_gen_config)
     app.router.add_post("/api/generated/{gen_id}/expiry", api_update_generated_expiry)
     app.router.add_post("/api/generated/{gen_id}/end", api_end_generated)
+    app.router.add_post("/api/generated/{gen_id}/revive", api_revive_generated)
     app.router.add_post("/api/generated/{gen_id}/note", api_update_generated_note)
     app.router.add_delete("/api/generated/{gen_id}", api_delete_generated)
     app.router.add_get("/api/backup", api_backup_export)

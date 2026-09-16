@@ -324,6 +324,19 @@ def delete_generated_sub(gen_id: int, user_id: int) -> bool:
     return deleted
 
 
+def revive_generated_sub(gen_id: int, user_id: int, expires_at: str | None) -> bool:
+    """زنده کردن اشتراک سفارشی: تاریخ ساخت و انقضا از نو، توکن و کانفیگ‌ها بدون تغییر."""
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE generated_subs SET created_at=?, expires_at=? WHERE id=? AND user_id=?",
+        (_now_iso(), expires_at, gen_id, user_id),
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
+
+
 def update_generated_expiry(gen_id: int, user_id: int, expires_at: str | None) -> bool:
     conn = _conn()
     cur = conn.execute(

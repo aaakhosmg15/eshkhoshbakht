@@ -320,7 +320,10 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⏰ تغییر انقضا", callback_data=f"gen_expiry:{gen_id}"),
                 InlineKeyboardButton(text="📝 یادداشت", callback_data=f"gen_note:{gen_id}"),
             ],
-            [InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}")],
+            [
+                InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}"),
+                InlineKeyboardButton(text="🔄 زنده کردن اشتراک", callback_data=f"gen_revive:{gen_id}"),
+            ],
             [InlineKeyboardButton(text="🗑 حذف این اشتراک", callback_data=f"gen_delete:{gen_id}")],
             [InlineKeyboardButton(text="« بازگشت به لیست", callback_data="gens_back")],
         ]
@@ -1920,6 +1923,61 @@ async def gen_clear_note(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer("یادداشت پاک شد")
 
+
+
+
+@dp.callback_query(F.data.regexp(r"^gen_revive:\d+$"))
+async def gen_revive_pick_expiry(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("اجازه نداری.", show_alert=True)
+    gen_id = int(callback.data.split(":")[1])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="♾ بدون انقضا", callback_data=f"gen_revive_do:{gen_id}:0")],
+            [
+                InlineKeyboardButton(text="۷ روز", callback_data=f"gen_revive_do:{gen_id}:7"),
+                InlineKeyboardButton(text="۳۰ روز", callback_data=f"gen_revive_do:{gen_id}:30"),
+            ],
+            [
+                InlineKeyboardButton(text="۹۰ روز", callback_data=f"gen_revive_do:{gen_id}:90"),
+                InlineKeyboardButton(text="۱۸۰ روز", callback_data=f"gen_revive_do:{gen_id}:180"),
+            ],
+            [InlineKeyboardButton(text="« انصراف", callback_data=f"gen_open:{gen_id}")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"🔄 زنده کردن «{escape(g['name'])}»\n\n"
+        "لینک و توکن و اسم کانفیگ‌ها عوض نمی‌شود.\n"
+        "مدت اعتبار جدید را انتخاب کن (از همین لحظه):",
+        reply_markup=kb,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(r"^gen_revive_do:\d+:\d+$"))
+async def gen_revive_do(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("اجازه نداری.", show_alert=True)
+    parts = callback.data.split(":")
+    gen_id, days = int(parts[1]), int(parts[2])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    expires_at = None
+    if days > 0:
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    storage.revive_generated_sub(gen_id, callback.from_user.id, expires_at)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    await callback.message.edit_text(
+        gen_detail_text(g) + "\n\n✅ اشتراک زنده شد (لینک همان قبلی).",
+        reply_markup=build_gen_detail_keyboard(gen_id),
+        parse_mode="HTML",
+    )
+    await callback.answer("اشتراک زنده شد ✅")
 
 
 @dp.callback_query(F.data.regexp(r"^gen_end:\d+$"))

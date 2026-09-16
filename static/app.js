@@ -947,6 +947,8 @@ function renderGenDetail(gen) {
     if (noteBtn) noteBtn.addEventListener("click", () => openEditGenNote(gen));
     const endBtn = document.getElementById("end-gen-btn");
     if (endBtn) endBtn.addEventListener("click", () => confirmEndGen(gen));
+    const reviveBtn = document.getElementById("revive-gen-btn");
+    if (reviveBtn) reviveBtn.addEventListener("click", () => openReviveGen(gen));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
     });
@@ -993,6 +995,7 @@ function renderGenDetail(gen) {
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
         <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
         <button class="btn-sm btn btn-danger" id="end-gen-btn">⛔ اتمام اشتراک</button>
+        <button class="btn-sm btn" id="revive-gen-btn">🔄 زنده کردن اشتراک</button>
         <button class="btn" id="add-to-gen-btn">${icon("plus", "icon-sm")} افزودن کانفیگ از اشتراک دیگر</button>
       </div>
       <div class="qr-box" style="margin-top:16px;text-align:center">
@@ -1052,6 +1055,41 @@ function confirmDeleteGenConfig(gen, idx) {
   });
 }
 
+
+
+function openReviveGen(gen) {
+  openModal(`
+    <h2>🔄 زنده کردن اشتراک</h2>
+    <p style="margin:12px 0;color:var(--text-secondary);line-height:1.6">
+      لینک و توکن و اسم کانفیگ‌ها <b>عوض نمی‌شود</b>.
+      فقط تاریخ ساخت و انقضا از نو تنظیم می‌شود — انگار اشتراک تازه ساخته شده.
+    </p>
+    <label>مدت اعتبار جدید (روز) — ۰ = بدون انقضا</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
+      <button class="btn-sm btn" data-revive-days="0">♾ بدون انقضا</button>
+      <button class="btn-sm btn" data-revive-days="7">۷ روز</button>
+      <button class="btn-sm btn" data-revive-days="30">۳۰ روز</button>
+      <button class="btn-sm btn" data-revive-days="90">۹۰ روز</button>
+      <button class="btn-sm btn" data-revive-days="180">۱۸۰ روز</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline btn" id="cancel-btn">انصراف</button>
+    </div>
+  `);
+  document.getElementById("cancel-btn").addEventListener("click", closeModal);
+  document.querySelectorAll("[data-revive-days]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const days = parseInt(btn.dataset.reviveDays) || 0;
+      try {
+        await api("POST", `/api/generated/${gen.id}/revive`, { expiry_days: days });
+        state.currentGen = await api("GET", `/api/generated/${gen.id}`);
+        closeModal();
+        toast("اشتراک زنده شد — لینک همان قبلی است");
+        render();
+      } catch (e) { toast(e.message, true); }
+    });
+  });
+}
 
 function confirmEndGen(gen) {
   openModal(`
