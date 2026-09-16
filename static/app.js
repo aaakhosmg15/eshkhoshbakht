@@ -890,7 +890,7 @@ function renderGeneratedList() {
     <div class="list-item" data-open-gen="${g.id}">
       <div>
         <div class="title">${esc(g.name)} ${g.expired ? '<span class="badge badge-expired">منقضی</span>' : ""} ${g.live ? '<span class="badge badge-ms">لایو</span>' : ""}</div>
-        <div class="subtitle">${g.config_count} کانفیگ · ${fmtDate(g.created_at)}${g.remaining_text ? ` · ${esc(g.remaining_text)}` : ""}${g.note ? " · 📝" : ""}${g.public_note ? " · 📢" : ""}${g.last_accessed_at ? ` · 👁 ${fmtDate(g.last_accessed_at)}` : ""}</div>
+        <div class="subtitle">${g.config_count} کانفیگ · ${fmtDate(g.created_at)}${g.remaining_text ? ` · ${esc(g.remaining_text)}` : ""}${g.note ? " · 📝" : ""}</div>
       </div>
       <span class="chevron">${icon("chevron")}</span>
     </div>
@@ -927,8 +927,8 @@ function renderGenDetail(gen) {
       <span class="badge">${esc(c.protocol)}</span>
       <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
       <div class="config-actions gooey">
-        <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا" ${c.index === 0 ? "disabled" : ""}>↑</button>
-        <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین" ${c.index >= (gen.configs.length - 1) ? "disabled" : ""}>↓</button>
+        <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا">↑</button>
+        <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین">↓</button>
         <button class="btn-sm btn btn-icon" data-gen-rename="${c.index}" title="تغییر اسم">${icon("edit", "icon-sm")}</button>
         <button class="btn-sm btn btn-danger btn-icon" data-gen-del="${c.index}" title="حذف">${icon("trash", "icon-sm")}</button>
       </div>
@@ -947,12 +947,12 @@ function renderGenDetail(gen) {
     if (expBtn) expBtn.addEventListener("click", () => openChangeExpiry(gen));
     const noteBtn = document.getElementById("edit-gen-note-btn");
     if (noteBtn) noteBtn.addEventListener("click", () => openEditGenNote(gen));
-    const pubBtn = document.getElementById("edit-gen-pubnote-btn");
-    if (pubBtn) pubBtn.addEventListener("click", () => openEditGenPublicNote(gen));
     const endBtn = document.getElementById("end-gen-btn");
     if (endBtn) endBtn.addEventListener("click", () => confirmEndGen(gen));
     const reviveBtn = document.getElementById("revive-gen-btn");
     if (reviveBtn) reviveBtn.addEventListener("click", () => openReviveGen(gen));
+    const custBtn = document.getElementById("cust-msg-btn");
+    if (custBtn) custBtn.addEventListener("click", () => openCustomerMessage(gen));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
     });
@@ -960,10 +960,10 @@ function renderGenDetail(gen) {
       btn.addEventListener("click", () => confirmDeleteGenConfig(gen, parseInt(btn.dataset.genDel)));
     });
     app.querySelectorAll("[data-gen-up]").forEach((btn) => {
-      btn.addEventListener("click", () => moveGenConfig(gen, parseInt(btn.dataset.genUp), -1));
+      btn.addEventListener("click", () => reorderGenConfig(gen, parseInt(btn.dataset.genUp), "up"));
     });
     app.querySelectorAll("[data-gen-down]").forEach((btn) => {
-      btn.addEventListener("click", () => moveGenConfig(gen, parseInt(btn.dataset.genDown), 1));
+      btn.addEventListener("click", () => reorderGenConfig(gen, parseInt(btn.dataset.genDown), "down"));
     });
     // رندر QR لینک اشتراک
     try {
@@ -983,8 +983,14 @@ function renderGenDetail(gen) {
   const liveLabel = gen.live ? " · همگام با منبع" : " · ثابت";
   const remainingLabel = gen.remaining_text ? gen.remaining_text : "";
   const noteHtml = gen.note
-    ? `<div class="detail-meta" style="margin-top:8px">📝 ${esc(gen.note)}</div>`
+    ? `<div class="detail-meta" style="margin-top:8px">📝 یادداشت خصوصی: ${esc(gen.note)}</div>`
     : "";
+  const custHtml = gen.customer_message
+    ? `<div class="detail-meta" style="margin-top:8px;color:var(--accent)">📢 پیام مشتری: ${esc(gen.customer_message)}</div>`
+    : "";
+  const lastFetchHtml = gen.last_client_fetch
+    ? `<div class="detail-meta" style="margin-top:8px">👁 آخرین آپدیت مشتری: ${fmtDate(gen.last_client_fetch)}</div>`
+    : `<div class="detail-meta" style="margin-top:8px;opacity:.75">👁 آخرین آپدیت مشتری: هنوز آپدیت نشده</div>`;
 
   return `
     <button class="back-link" id="back-to-gens">${icon("back", "icon-sm")} بازگشت</button>
@@ -994,9 +1000,9 @@ function renderGenDetail(gen) {
           <div class="detail-title">${esc(gen.name)}</div>
           <div class="detail-meta">${gen.config_count} کانفیگ · ${fmtDate(gen.created_at)} · انقضا: ${expLabel}${liveLabel}</div>
           ${remainingLabel ? `<div class="detail-meta" style="margin-top:6px;font-weight:600;color:var(--accent)">${esc(remainingLabel)}</div>` : ""}
-          <div class="detail-meta" style="margin-top:6px">👁 آخرین آپدیت مشتری: ${gen.last_accessed_at ? fmtDate(gen.last_accessed_at) : "هنوز آپدیت نشده"}</div>
           ${noteHtml}
-          ${gen.public_note ? `<div class="detail-meta" style="margin-top:8px;padding:10px 12px;border-radius:10px;background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.3)">📢 ${esc(gen.public_note)}</div>` : ""}
+          ${custHtml}
+          ${lastFetchHtml}
         </div>
         <button class="btn-sm btn btn-danger" id="delete-gen-btn">${icon("trash", "icon-sm")} حذف</button>
       </div>
@@ -1005,10 +1011,10 @@ function renderGenDetail(gen) {
       <div class="action-bar">
         <button class="btn-sm btn" id="copy-gen-url">${icon("copy", "icon-sm")} کپی لینک</button>
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
-        <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت خصوصی</button>
-        <button class="btn-sm btn" id="edit-gen-pubnote-btn">📢 پیام مشتری</button>
+        <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
+        <button class="btn-sm btn" id="cust-msg-btn">📢 پیام مشتری</button>
         <button class="btn-sm btn btn-danger" id="end-gen-btn">⛔ اتمام اشتراک</button>
-        <button class="btn-sm btn" id="revive-gen-btn">🔄 زنده کردن اشتراک</button>
+        <button class="btn-sm btn btn-revive" id="revive-gen-btn">🔄 زنده کردن اشتراک</button>
         <button class="btn" id="add-to-gen-btn">${icon("plus", "icon-sm")} افزودن کانفیگ از اشتراک دیگر</button>
       </div>
       <div class="qr-box" style="margin-top:16px;text-align:center">
@@ -1071,43 +1077,45 @@ function confirmDeleteGenConfig(gen, idx) {
 
 
 
-async function moveGenConfig(gen, idx, direction) {
+async function reorderGenConfig(gen, idx, direction) {
   try {
-    state.currentGen = await api("POST", `/api/generated/${gen.id}/configs/${idx}/move`, { direction });
-    toast("جابه‌جا شد");
+    state.currentGen = await api("POST", `/api/generated/${gen.id}/configs/${idx}/reorder`, { direction });
+    toast(direction === "up" ? "بالا رفت" : "پایین رفت");
     render();
   } catch (e) { toast(e.message, true); }
 }
 
-function openEditGenPublicNote(gen) {
+function openCustomerMessage(gen) {
+  const current = gen.customer_message || "";
   openModal(`
     <h2>📢 پیام مشتری</h2>
-    <p style="margin:8px 0 12px;color:var(--text-secondary);font-size:.88rem;line-height:1.5">
-      این متن را مشتری در کلاینت (به‌صورت یک ردیف) و در پنل عمومی لینک می‌بیند. یادداشت خصوصی نیست.
+    <p style="margin:12px 0;color:var(--text-secondary);line-height:1.6">
+      این پیام را مشتری در <b>کلاینت VPN</b> (به‌صورت یک ردیف کانفیگ) و در
+      <b>صفحه عمومی لینک ساب</b> می‌بیند. جدا از یادداشت خصوصی است.
     </p>
     <label>متن پیام</label>
-    <textarea id="gen-pubnote-input" rows="3" placeholder="مثلاً: پشتیبانی تلگرام @example">${esc(gen.public_note || "")}</textarea>
+    <textarea id="cust-msg-input" rows="3" style="width:100%;margin-top:6px" dir="rtl">${esc(current)}</textarea>
     <div class="modal-actions">
       <button class="btn-outline btn" id="cancel-btn">انصراف</button>
-      <button class="btn-outline btn" id="clear-pubnote-btn">پاک کردن</button>
-      <button class="btn" id="confirm-btn">ذخیره</button>
+      <button class="btn-outline btn" id="clear-cust-btn">پاک کردن</button>
+      <button class="btn" id="save-cust-btn">ذخیره</button>
     </div>
   `);
   document.getElementById("cancel-btn").addEventListener("click", closeModal);
-  document.getElementById("clear-pubnote-btn").addEventListener("click", async () => {
+  document.getElementById("clear-cust-btn").addEventListener("click", async () => {
     try {
-      const updated = await api("POST", `/api/generated/${gen.id}/public-note`, { clear: true });
-      Object.assign(state.currentGen, updated);
+      await api("POST", `/api/generated/${gen.id}/customer-message`, { clear: true });
+      state.currentGen = await api("GET", `/api/generated/${gen.id}`);
       closeModal();
       toast("پیام مشتری پاک شد");
       render();
     } catch (e) { toast(e.message, true); }
   });
-  document.getElementById("confirm-btn").addEventListener("click", async () => {
-    const public_note = document.getElementById("gen-pubnote-input").value;
+  document.getElementById("save-cust-btn").addEventListener("click", async () => {
+    const message = (document.getElementById("cust-msg-input").value || "").trim();
     try {
-      const updated = await api("POST", `/api/generated/${gen.id}/public-note`, { public_note });
-      Object.assign(state.currentGen, updated);
+      await api("POST", `/api/generated/${gen.id}/customer-message`, { message });
+      state.currentGen = await api("GET", `/api/generated/${gen.id}`);
       closeModal();
       toast("پیام مشتری ذخیره شد");
       render();

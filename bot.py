@@ -36,8 +36,8 @@ from config_parser import (
     encode_subscription,
     get_protocol,
     get_remark,
+    make_customer_message_config,
     make_expiry_info_config,
-    make_public_note_config,
     remaining_time_text,
     rename_config,
 )
@@ -91,6 +91,7 @@ class RenameState(StatesGroup):
 class GenEditState(StatesGroup):
     waiting_cfg_name = State()
     waiting_note = State()
+    waiting_customer_message = State()
 
 
 class BackupState(StatesGroup):
@@ -203,14 +204,13 @@ def gen_detail_text(g: dict) -> str:
     live_line = "🔄 همگام با منبع\n" if g.get("items") else "📌 ثابت (snapshot)\n"
     note = (g.get("note") or "").strip()
     note_line = f"📝 یادداشت خصوصی: {escape(note)}\n" if note else ""
-    pub = (g.get("public_note") or "").strip()
-    pub_line = f"📢 پیام مشتری: {escape(pub)}\n" if pub else ""
-    last = g.get("last_accessed_at")
-    last_line = (
-        f"👁 آخرین آپدیت مشتری: {_format_updated_at(last)}\n"
-        if last
-        else "👁 آخرین آپدیت مشتری: هنوز آپدیت نشده\n"
-    )
+    cust = (g.get("customer_message") or "").strip()
+    cust_line = f"📢 پیام مشتری: {escape(cust)}\n" if cust else ""
+    last_fetch = (g.get("last_client_fetch") or "").strip()
+    if last_fetch:
+        fetch_line = f"👁 آخرین آپدیت مشتری: {_format_updated_at(last_fetch)}\n"
+    else:
+        fetch_line = "👁 آخرین آپدیت مشتری: هنوز آپدیت نشده\n"
     text = (
         f"🛠 <b>{escape(g['name'])}</b>\n"
         f"📦 {len(g['configs'])} کانفیگ\n"
@@ -218,9 +218,9 @@ def gen_detail_text(g: dict) -> str:
         f"{exp_line}"
         f"📊 {escape(remaining)}\n"
         f"{live_line}"
-        f"{last_line}"
         f"{note_line}"
-        f"{pub_line}\n"
+        f"{cust_line}"
+        f"{fetch_line}\n"
         f"🔗 لینک اشتراک:\n<code>{url}</code>"
     )
     return text
@@ -329,13 +329,11 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="➕ افزودن کانفیگ از یک اشتراک دیگه", callback_data=f"gen_add:{gen_id}")],
             [
                 InlineKeyboardButton(text="⏰ تغییر انقضا", callback_data=f"gen_expiry:{gen_id}"),
-                InlineKeyboardButton(text="📝 یادداشت خصوصی", callback_data=f"gen_note:{gen_id}"),
+                InlineKeyboardButton(text="📝 یادداشت", callback_data=f"gen_note:{gen_id}"),
             ],
-            [InlineKeyboardButton(text="📢 پیام مشتری", callback_data=f"gen_pubnote:{gen_id}")],
-            [
-                InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}"),
-                InlineKeyboardButton(text="🔄 زنده کردن اشتراک", callback_data=f"gen_revive:{gen_id}"),
-            ],
+            [InlineKeyboardButton(text="📢 پیام مشتری", callback_data=f"gen_custmsg:{gen_id}")],
+            [InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}")],
+            [InlineKeyboardButton(text="🔄 زنده کردن اشتراک", callback_data=f"gen_revive:{gen_id}")],
             [InlineKeyboardButton(text="🗑 حذف این اشتراک", callback_data=f"gen_delete:{gen_id}")],
             [InlineKeyboardButton(text="« بازگشت به لیست", callback_data="gens_back")],
         ]
@@ -365,11 +363,11 @@ def build_gen_configs_keyboard(gen_id: int, configs: list[str], page: int = 0) -
 def build_gen_cfg_action_keyboard(gen_id: int, idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"gen_cfg_rename:{gen_id}:{idx}")],
             [
-                InlineKeyboardButton(text="⬆️ بالا", callback_data=f"gen_cfg_move:{gen_id}:{idx}:-1"),
-                InlineKeyboardButton(text="⬇️ پایین", callback_data=f"gen_cfg_move:{gen_id}:{idx}:1"),
+                InlineKeyboardButton(text="⬆️ بالا", callback_data=f"gen_cfg_up:{gen_id}:{idx}"),
+                InlineKeyboardButton(text="⬇️ پایین", callback_data=f"gen_cfg_down:{gen_id}:{idx}"),
             ],
+            [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"gen_cfg_rename:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="🗑 حذف این کانفیگ", callback_data=f"gen_cfg_del:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="« بازگشت به لیست کانفیگ‌ها", callback_data=f"gen_cfgs:{gen_id}:0")],
         ]
@@ -559,8 +557,11 @@ def _build_panel_html(gen: dict, public_url: str) -> str:
             exp_label = _format_updated_at(exp)
     else:
         exp_label = "بدون محدودیت"
-    pub_note = (gen.get("public_note") or "").strip()
-    pub_note_html = f'<div class="public-note">📢 {escape(pub_note)}</div>' if pub_note else ""
+
+    cust_msg = (gen.get("customer_message") or "").strip()
+    cust_banner = ""
+    if cust_msg:
+        cust_banner = f'<div class="banner-msg">📢 {escape(cust_msg)}</div>'
 
     rows_html = []
     for i, raw in enumerate(configs):
@@ -618,11 +619,6 @@ def _build_panel_html(gen: dict, public_url: str) -> str:
   }}
   h1 {{ font-size: 1.5rem; font-weight: 700; margin-bottom: 6px; }}
   .meta {{ color: var(--muted); font-size: .9rem; }}
-  .public-note {{
-    margin-top: 14px; padding: 12px 16px; border-radius: 12px;
-    background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35);
-    color: #7dd3fc; font-size: 0.92rem; text-align: right; line-height: 1.5;
-  }}
   .panel {{
     background: var(--card); border: 1px solid var(--border);
     border-radius: 16px; padding: 20px; margin-bottom: 20px;
@@ -677,6 +673,11 @@ def _build_panel_html(gen: dict, public_url: str) -> str:
   }}
   .remark {{ display: block; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
   .empty {{ color: var(--muted); text-align: center; padding: 24px; }}
+  .banner-msg {{
+    background: rgba(56,189,248,.12); border: 1px solid rgba(56,189,248,.35);
+    color: var(--accent); border-radius: 12px; padding: 12px 16px;
+    margin-bottom: 18px; font-size: .95rem; line-height: 1.6; text-align: center;
+  }}
   .toast {{
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
     background: var(--ok); color: #064e3b; padding: 10px 20px; border-radius: 999px;
@@ -693,8 +694,8 @@ def _build_panel_html(gen: dict, public_url: str) -> str:
     <div class="logo">⚡</div>
     <h1>{name}</h1>
     <p class="meta">{len(configs)} کانفیگ · ساخته‌شده {created} · انقضا: {exp_label}</p>
-    {pub_note_html}
   </header>
+  {cust_banner}
   <div class="panel">
     <h2>لینک اشتراک</h2>
     <div class="url-box">
@@ -797,22 +798,22 @@ async def handle_sub(request: web.Request) -> web.Response:
     gen = storage.get_generated_by_token(token)
     if not gen:
         return web.Response(text="Subscription not found", status=404, content_type="text/plain")
+
+    # ثبت آخرین آپدیت توسط مشتری
     try:
-        storage.touch_generated_last_accessed(token)
-        gen = storage.get_generated_by_token(token) or gen
+        storage.touch_generated_client_fetch(token)
     except Exception:
         pass
 
     # کانفیگ فیک نمایش‌دهنده وضعیت اعتبار (مشترک با config_parser)
     info_cfg = make_expiry_info_config(gen.get("expires_at"))
-    pub_note = (gen.get("public_note") or "").strip()
-    pub_cfg = make_public_note_config(pub_note) if pub_note else None
+    msg_cfg = make_customer_message_config(gen.get("customer_message") or "")
 
     if storage.is_generated_expired(gen):
         # وقتی منقضی شد: فقط کانفیگ فیک «منقضی شده» باقی می‌ماند و بقیه پاک می‌شوند
         live_configs = [info_cfg]
-        if pub_cfg:
-            live_configs = [pub_cfg] + live_configs
+        if msg_cfg:
+            live_configs.append(msg_cfg)
     else:
         # ۱) ری‌فچ منابع از اینترنت  ۲) ساخت کانفیگ‌های لایو از روی recipe
         try:
@@ -820,10 +821,10 @@ async def handle_sub(request: web.Request) -> web.Response:
         except Exception as e:
             logger.warning(f"refresh sources failed for token={token}: {e}")
         live_configs = storage.resolve_generated_configs(gen, persist=True)
-        # اضافه کردن کانفیگ فیک در ابتدای لیست
+        # اضافه کردن کانفیگ فیک در ابتدای لیست (+ پیام مشتری)
         prefix = [info_cfg]
-        if pub_cfg:
-            prefix = [pub_cfg, info_cfg]
+        if msg_cfg:
+            prefix.append(msg_cfg)
         live_configs = prefix + live_configs
 
     body = encode_subscription(live_configs)
@@ -1896,85 +1897,13 @@ async def gen_set_expiry(callback: CallbackQuery):
 
 # ---------- یادداشت اشتراک سفارشی ----------
 
-
-@dp.callback_query(F.data.regexp(r"^gen_pubnote:\d+$"))
-async def gen_ask_pubnote(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        return await callback.answer("اجازه نداری.", show_alert=True)
-    gen_id = int(callback.data.split(":")[1])
-    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
-    if not g:
-        return await callback.answer("پیدا نشد.", show_alert=True)
-    await state.set_state(GenEditState.waiting_note)
-    await state.update_data(gen_id=gen_id, note_kind="private")
-    await state.update_data(gen_id=gen_id, note_kind="public")
-    current = (g.get("public_note") or "").strip()
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🗑 پاک کردن پیام مشتری", callback_data=f"gen_pubnote_clear:{gen_id}")],
-            [InlineKeyboardButton(text="« انصراف", callback_data=f"gen_open:{gen_id}")],
-        ]
-    )
-    msg = (
-        "📢 پیام قابل‌مشاهده برای مشتری «" + escape(g["name"]) + "»\n"
-        "فعلی: " + (escape(current) if current else "(خالی)") + "\n\n"
-        "متن جدید را بفرست (مشتری در کلاینت/پنل عمومی می‌بیند):"
-    )
-    await callback.message.edit_text(msg, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
-
-@dp.callback_query(F.data.regexp(r"^gen_pubnote_clear:\d+$"))
-async def gen_clear_pubnote(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        return await callback.answer("اجازه نداری.", show_alert=True)
-    gen_id = int(callback.data.split(":")[1])
-    await state.clear()
-    storage.update_generated_public_note(gen_id, callback.from_user.id, "")
-    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
-    await callback.message.edit_text(
-        gen_detail_text(g),
-        reply_markup=build_gen_detail_keyboard(gen_id),
-        parse_mode="HTML",
-    )
-    await callback.answer("پیام مشتری پاک شد.")
-
-
-@dp.callback_query(F.data.regexp(r"^gen_cfg_move:\d+:\d+:-?\d+$"))
-async def gen_cfg_move(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        return await callback.answer("اجازه نداری.", show_alert=True)
-    parts = callback.data.split(":")
-    gen_id, idx, direction = int(parts[1]), int(parts[2]), int(parts[3])
-    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
-    if not g:
-        return await callback.answer("پیدا نشد.", show_alert=True)
-    storage.resolve_generated_configs(g, persist=True)
-    ok = storage.move_generated_config(gen_id, callback.from_user.id, idx, direction)
-    if not ok:
-        return await callback.answer("جابه‌جایی ممکن نیست.", show_alert=True)
-    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
-    live = storage.resolve_generated_configs(g, persist=True)
-    new_idx = idx + direction
-    body = (
-        f"کانفیگ جابه‌جا شد.\nالان موقعیت: {new_idx + 1}\n"
-        f"[{get_protocol(live[new_idx])}] {escape(get_remark(live[new_idx]) or '(بدون نام)')}"
-    )
-    await callback.message.edit_text(
-        body,
-        reply_markup=build_gen_cfg_action_keyboard(gen_id, new_idx),
-        parse_mode="HTML",
-    )
-    await callback.answer("جابه‌جا شد ✅")
-
-
 @dp.callback_query(F.data.regexp(r"^gen_note:\d+$"))
 async def gen_ask_note(callback: CallbackQuery, state: FSMContext):
     gen_id = int(callback.data.split(":")[1])
     g = storage.get_generated_by_id(gen_id, callback.from_user.id)
     if not g:
         return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
-    await state.update_data(gen_id=gen_id, note_kind="private")
+    await state.update_data(gen_id=gen_id)
     await state.set_state(GenEditState.waiting_note)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1996,7 +1925,7 @@ async def gen_ask_note(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(GenEditState.waiting_note)
 async def gen_save_note(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+    if await bail_if_menu_button(message, state):
         return
     data = await state.get_data()
     gen_id = data.get("gen_id")
@@ -2004,17 +1933,13 @@ async def gen_save_note(message: Message, state: FSMContext):
         await state.clear()
         return await message.answer("خطا. دوباره تلاش کن.")
     note = (message.text or "").strip()
-    kind = data.get("note_kind") or "private"
-    if kind == "public":
-        storage.update_generated_public_note(gen_id, message.from_user.id, note)
-        msg = "پیام مشتری ذخیره شد."
-    else:
-        storage.update_generated_note(gen_id, message.from_user.id, note)
-        msg = "یادداشت خصوصی ذخیره شد."
+    storage.update_generated_note(gen_id, message.from_user.id, note)
     await state.clear()
     g = storage.get_generated_by_id(gen_id, message.from_user.id)
+    if not g:
+        return await message.answer("اشتراک پیدا نشد.")
     await message.answer(
-        gen_detail_text(g) + "\n\n✅ " + msg,
+        gen_detail_text(g),
         reply_markup=build_gen_detail_keyboard(gen_id),
         parse_mode="HTML",
     )
@@ -2034,6 +1959,127 @@ async def gen_clear_note(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
     await callback.answer("یادداشت پاک شد")
+
+
+@dp.callback_query(F.data.regexp(r"^gen_custmsg:\d+$"))
+async def gen_ask_customer_message(callback: CallbackQuery, state: FSMContext):
+    gen_id = int(callback.data.split(":")[1])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
+    await state.update_data(gen_id=gen_id)
+    await state.set_state(GenEditState.waiting_customer_message)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 پاک کردن پیام", callback_data=f"gen_custmsg_clear:{gen_id}")],
+            [InlineKeyboardButton(text="« انصراف", callback_data=f"gen_open:{gen_id}")],
+        ]
+    )
+    current = (g.get("customer_message") or "").strip()
+    if current:
+        prompt = (
+            f"📢 پیام مشتری برای «{escape(g['name'])}» را بفرست "
+            f"(مشتری در کلاینت و صفحه لینک می‌بیند):\n\nفعلی:\n{escape(current)}"
+        )
+    else:
+        prompt = (
+            f"📢 پیام مشتری برای «{escape(g['name'])}» را بفرست.\n"
+            "این پیام در لیست کانفیگ‌های کلاینت و صفحه عمومی لینک نمایش داده می‌شود."
+        )
+    await callback.message.answer(prompt, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@dp.message(GenEditState.waiting_customer_message)
+async def gen_save_customer_message(message: Message, state: FSMContext):
+    if await bail_if_menu_button(message, state):
+        return
+    data = await state.get_data()
+    gen_id = data.get("gen_id")
+    if not gen_id:
+        await state.clear()
+        return await message.answer("خطا. دوباره تلاش کن.")
+    msg = (message.text or "").strip()
+    storage.update_generated_customer_message(gen_id, message.from_user.id, msg)
+    await state.clear()
+    g = storage.get_generated_by_id(gen_id, message.from_user.id)
+    if not g:
+        return await message.answer("اشتراک پیدا نشد.")
+    await message.answer(
+        gen_detail_text(g) + "\n\n✅ پیام مشتری ذخیره شد.",
+        reply_markup=build_gen_detail_keyboard(gen_id),
+        parse_mode="HTML",
+    )
+
+
+@dp.callback_query(F.data.regexp(r"^gen_custmsg_clear:\d+$"))
+async def gen_clear_customer_message(callback: CallbackQuery, state: FSMContext):
+    gen_id = int(callback.data.split(":")[1])
+    storage.update_generated_customer_message(gen_id, callback.from_user.id, "")
+    await state.clear()
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    await callback.message.edit_text(
+        gen_detail_text(g),
+        reply_markup=build_gen_detail_keyboard(gen_id),
+        parse_mode="HTML",
+    )
+    await callback.answer("پیام مشتری پاک شد")
+
+
+@dp.callback_query(F.data.regexp(r"^gen_cfg_up:\d+:\d+$"))
+async def gen_cfg_move_up(callback: CallbackQuery):
+    _, gen_id, idx = callback.data.split(":")
+    gen_id, idx = int(gen_id), int(idx)
+    if idx <= 0:
+        return await callback.answer("اولین کانفیگ است.", show_alert=True)
+    ok = storage.reorder_config_in_generated(gen_id, callback.from_user.id, idx, -1)
+    if not ok:
+        return await callback.answer("جابه‌جایی ممکن نیست.", show_alert=True)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    configs = storage.resolve_generated_configs(g, persist=True) if g else []
+    new_idx = idx - 1
+    raw = configs[new_idx] if new_idx < len(configs) else ""
+    remark = get_remark(raw) or "(بدون نام)"
+    proto = get_protocol(raw)
+    await callback.message.edit_text(
+        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n\n"
+        f"اشتراک: {escape(g['name'] if g else '')}\n"
+        f"✅ یک پله بالا رفت (موقعیت {new_idx + 1})",
+        reply_markup=build_gen_cfg_action_keyboard(gen_id, new_idx),
+        parse_mode="HTML",
+    )
+    await callback.answer("بالا رفت")
+
+
+@dp.callback_query(F.data.regexp(r"^gen_cfg_down:\d+:\d+$"))
+async def gen_cfg_move_down(callback: CallbackQuery):
+    _, gen_id, idx = callback.data.split(":")
+    gen_id, idx = int(gen_id), int(idx)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    configs = storage.resolve_generated_configs(g, persist=True)
+    if idx >= len(configs) - 1:
+        return await callback.answer("آخرین کانفیگ است.", show_alert=True)
+    ok = storage.reorder_config_in_generated(gen_id, callback.from_user.id, idx, +1)
+    if not ok:
+        return await callback.answer("جابه‌جایی ممکن نیست.", show_alert=True)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    configs = storage.resolve_generated_configs(g, persist=True) if g else []
+    new_idx = idx + 1
+    raw = configs[new_idx] if new_idx < len(configs) else ""
+    remark = get_remark(raw) or "(بدون نام)"
+    proto = get_protocol(raw)
+    await callback.message.edit_text(
+        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n\n"
+        f"اشتراک: {escape(g['name'] if g else '')}\n"
+        f"✅ یک پله پایین رفت (موقعیت {new_idx + 1})",
+        reply_markup=build_gen_cfg_action_keyboard(gen_id, new_idx),
+        parse_mode="HTML",
+    )
+    await callback.answer("پایین رفت")
 
 
 
