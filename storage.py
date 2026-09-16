@@ -63,6 +63,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if gen_cols and "note" not in gen_cols:
         conn.execute("ALTER TABLE generated_subs ADD COLUMN note TEXT")
         conn.commit()
+    gen_cols = {row[1] for row in conn.execute("PRAGMA table_info(generated_subs)").fetchall()}
+    if gen_cols and "public_note" not in gen_cols:
+        conn.execute("ALTER TABLE generated_subs ADD COLUMN public_note TEXT")
+        conn.commit()
+    gen_cols = {row[1] for row in conn.execute("PRAGMA table_info(generated_subs)").fetchall()}
+    if gen_cols and "last_accessed_at" not in gen_cols:
+        conn.execute("ALTER TABLE generated_subs ADD COLUMN last_accessed_at TEXT")
+        conn.commit()
 
 
 def _conn():
@@ -88,7 +96,9 @@ def _conn():
             created_at TEXT NOT NULL,
             expires_at TEXT,
             items TEXT,
-            note TEXT
+            note TEXT,
+            public_note TEXT,
+            last_accessed_at TEXT
         )"""
     )
     _migrate(conn)
@@ -220,12 +230,14 @@ def create_generated_sub(
 
 
 def _row_to_generated(row) -> dict:
-    """پشتیبانی از شکل‌های قدیمی (بدون items / بدون note) و جدید."""
-    # ترتیب: id, user_id, name, token, configs, created_at, expires_at, items, note
+    """پشتیبانی از شکل‌های قدیمی و جدید (public_note / last_accessed_at)."""
+    # ترتیب: id, user_id, name, token, configs, created_at, expires_at, items, note, public_note, last_accessed_at
     n = len(row)
     gid, user_id, name, tok, configs_json, created_at, expires_at = row[:7]
     items_json = row[7] if n >= 8 else None
     note = row[8] if n >= 9 else ""
+    public_note = row[9] if n >= 10 else ""
+    last_accessed_at = row[10] if n >= 11 else None
     items = None
     if items_json:
         try:
@@ -242,13 +254,15 @@ def _row_to_generated(row) -> dict:
         "expires_at": expires_at,
         "items": items,
         "note": note or "",
+        "public_note": public_note or "",
+        "last_accessed_at": last_accessed_at,
     }
 
 
 def get_generated_by_token(token: str) -> dict | None:
     conn = _conn()
     row = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note FROM generated_subs WHERE token=?",
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, public_note, last_accessed_at FROM generated_subs WHERE token=?",
         (token,),
     ).fetchone()
     conn.close()
@@ -260,7 +274,7 @@ def get_generated_by_token(token: str) -> dict | None:
 def get_generated_by_id(gen_id: int, user_id: int) -> dict | None:
     conn = _conn()
     row = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note FROM generated_subs WHERE id=? AND user_id=?",
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, public_note, last_accessed_at FROM generated_subs WHERE id=? AND user_id=?",
         (gen_id, user_id),
     ).fetchone()
     conn.close()
@@ -274,7 +288,7 @@ def list_generated_subs(user_id: int) -> list[dict]:
     cleanup_old_expired_generated()
     conn = _conn()
     rows = conn.execute(
-        "SELECT id, name, token, configs, created_at, expires_at, items, note FROM generated_subs WHERE user_id=? ORDER BY id DESC",
+        "SELECT id, name, token, configs, created_at, expires_at, items, note, public_note, last_accessed_at FROM generated_subs WHERE user_id=? ORDER BY id DESC",
         (user_id,),
     ).fetchall()
     conn.close()
@@ -283,6 +297,8 @@ def list_generated_subs(user_id: int) -> list[dict]:
         gid, name, token, configs_json, created_at, expires_at = row[:6]
         items_json = row[6] if len(row) > 6 else None
         note = row[7] if len(row) > 7 else ""
+        public_note = row[8] if len(row) > 8 else ""
+        last_accessed_at = row[9] if len(row) > 9 else None
         configs = json.loads(configs_json)
         items = None
         if items_json:
@@ -300,6 +316,8 @@ def list_generated_subs(user_id: int) -> list[dict]:
                 "expires_at": expires_at,
                 "items": items,
                 "note": note or "",
+                "public_note": public_note or "",
+                "last_accessed_at": last_accessed_at,
             }
         )
     return result
@@ -359,6 +377,67 @@ def update_generated_note(gen_id: int, user_id: int, note: str) -> bool:
     ok = cur.rowcount > 0
     conn.close()
     return ok
+
+
+
+def update_generated_public_note(gen_id: int, user_id: int, public_note: str) -> bool:
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE generated_subs SET public_note=? WHERE id=? AND user_id=?",
+        (public_note, gen_id, user_id),
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
+
+
+def touch_generated_last_accessed(token: str) -> None:
+    """زمان آخرین دریافت ساب توسط مشتری (کلاینت یا مرورگر)."""
+    conn = _conn()
+    conn.execute(
+        "UPDATE generated_subs SET last_accessed_at=? WHERE token=?",
+        (_now_iso(), token),
+    )
+    conn.commit()
+    conn.close()
+
+
+def move_generated_config(gen_id: int, user_id: int, idx: int, direction: int) -> bool:
+    """جابه‌جایی کانفیگ در لیست (direction: -1 بالا، +1 پایین). items همگام می‌شود."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT configs, items FROM generated_subs WHERE id=? AND user_id=?",
+        (gen_id, user_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    configs = json.loads(row[0])
+    j = idx + direction
+    if idx < 0 or idx >= len(configs) or j < 0 or j >= len(configs):
+        conn.close()
+        return False
+    configs[idx], configs[j] = configs[j], configs[idx]
+    items = None
+    if row[1]:
+        try:
+            items = json.loads(row[1])
+        except Exception:
+            items = None
+    if isinstance(items, list) and len(items) == len(configs):
+        # after swap, lengths match original order — swap items the same way
+        # configs already swapped; items still old order with same length as configs
+        # Actually configs was swapped in place; items needs same swap on original indices
+        items[idx], items[j] = items[j], items[idx]
+    conn.execute(
+        "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
+        (json.dumps(configs), json.dumps(items) if items is not None else None, gen_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
 
 
 def cleanup_old_expired_generated(grace_days: int = 7) -> int:
@@ -634,7 +713,7 @@ def export_full_backup() -> dict:
         "SELECT id, user_id, name, note, sub_url, configs, updated_at FROM subs ORDER BY id"
     ).fetchall()
     gen_rows = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note FROM generated_subs ORDER BY id"
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, public_note, last_accessed_at FROM generated_subs ORDER BY id"
     ).fetchall()
     conn.close()
 

@@ -76,6 +76,8 @@ def _gen_summary(gen: dict, request: web.Request) -> dict:
         "expired": storage.is_generated_expired(gen),
         "remaining_text": remaining_time_text(gen.get("expires_at")),
         "note": gen.get("note") or "",
+        "public_note": gen.get("public_note") or "",
+        "last_accessed_at": gen.get("last_accessed_at"),
         "url": _make_url(gen["token"], request),
         "live": bool(gen.get("items")),
     }
@@ -538,6 +540,49 @@ async def api_update_generated_note(request: web.Request) -> web.Response:
     return web.json_response(_gen_summary(gen, request))
 
 
+async def api_update_generated_public_note(request: web.Request) -> web.Response:
+    """یادداشت قابل‌مشاهده برای مشتری: body { "public_note": "..." } یا { "clear": true }"""
+    gen_id = int(request.match_info["gen_id"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    body = await _json_body(request) or {}
+    if body.get("clear"):
+        public_note = ""
+    else:
+        public_note = (body.get("public_note") or "").strip()
+    storage.update_generated_public_note(gen_id, request["user_id"], public_note)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    return web.json_response(_gen_summary(gen, request))
+
+
+async def api_move_gen_config(request: web.Request) -> web.Response:
+    """جابه‌جایی کانفیگ: body { "direction": -1|1 }"""
+    gen_id = int(request.match_info["gen_id"])
+    idx = int(request.match_info["idx"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    body = await _json_body(request) or {}
+    try:
+        direction = int(body.get("direction") or 0)
+    except (TypeError, ValueError):
+        return _err("direction نامعتبره.")
+    if direction not in (-1, 1):
+        return _err("direction باید 1 یا -1 باشد.")
+    storage.resolve_generated_configs(gen, persist=True)
+    ok = storage.move_generated_config(gen_id, request["user_id"], idx, direction)
+    if not ok:
+        return _err("جابه‌جایی ممکن نیست (ابتدا/انتهای لیست).", 400)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    live = storage.resolve_generated_configs(gen, persist=True) if gen else []
+    data = _gen_summary(gen, request)
+    data["config_count"] = len(live)
+    data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    return web.json_response(data)
+
+
+
 async def api_backup_export(request: web.Request) -> web.Response:
     """دانلود بک‌آپ کامل JSON برای جابه‌جایی سرور (توکن‌ها حفظ می‌شوند)."""
     data = storage.export_full_backup()
@@ -604,6 +649,8 @@ def add_routes(app: web.Application) -> None:
     app.router.add_post("/api/generated/{gen_id}/end", api_end_generated)
     app.router.add_post("/api/generated/{gen_id}/revive", api_revive_generated)
     app.router.add_post("/api/generated/{gen_id}/note", api_update_generated_note)
+    app.router.add_post("/api/generated/{gen_id}/public-note", api_update_generated_public_note)
+    app.router.add_post("/api/generated/{gen_id}/configs/{idx}/move", api_move_gen_config)
     app.router.add_delete("/api/generated/{gen_id}", api_delete_generated)
     app.router.add_get("/api/backup", api_backup_export)
     app.router.add_post("/api/backup/restore", api_backup_restore)
