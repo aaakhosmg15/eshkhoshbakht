@@ -160,18 +160,6 @@ def remaining_time_text(expires_at: str | None) -> str:
         return "⏰ تاریخ انقضا نامعتبر"
 
 
-
-def make_public_note_config(note: str) -> str:
-    """کانفیگ فیک برای نمایش پیام ادمین به مشتری در لیست کلاینت."""
-    remark = f"📢 {note.strip()}" if note and note.strip() else ""
-    if not remark:
-        return ""
-    return (
-        "vless://00000000-0000-0000-0000-000000000001@127.0.0.1:1"
-        f"?encryption=none&security=none&type=tcp#{quote(remark)}"
-    )
-
-
 def make_expiry_info_config(expires_at: str | None) -> str:
     """
     کانفیگ فیک برای نمایش مدت اعتبار در لیست کانفیگ‌های کلاینت.
