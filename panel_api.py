@@ -491,6 +491,18 @@ async def api_update_generated_expiry(request: web.Request) -> web.Response:
     return web.json_response(_gen_summary(gen, request))
 
 
+async def api_end_generated(request: web.Request) -> web.Response:
+    """اتمام فوری اشتراک سفارشی — مثل منقضی شدن: در کلاینت فقط پیام اتمام نمایش داده می‌شود."""
+    gen_id = int(request.match_info["gen_id"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    storage.update_generated_expiry(gen_id, request["user_id"], now_iso)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    return web.json_response(_gen_summary(gen, request))
+
+
 async def api_update_generated_note(request: web.Request) -> web.Response:
     """body: { "note": "..." } یا { "clear": true }"""
     gen_id = int(request.match_info["gen_id"])
@@ -570,6 +582,7 @@ def add_routes(app: web.Application) -> None:
     app.router.add_post("/api/generated/{gen_id}/configs/{idx}/rename", api_rename_gen_config)
     app.router.add_delete("/api/generated/{gen_id}/configs/{idx}", api_delete_gen_config)
     app.router.add_post("/api/generated/{gen_id}/expiry", api_update_generated_expiry)
+    app.router.add_post("/api/generated/{gen_id}/end", api_end_generated)
     app.router.add_post("/api/generated/{gen_id}/note", api_update_generated_note)
     app.router.add_delete("/api/generated/{gen_id}", api_delete_generated)
     app.router.add_get("/api/backup", api_backup_export)

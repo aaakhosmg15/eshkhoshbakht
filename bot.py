@@ -320,6 +320,7 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⏰ تغییر انقضا", callback_data=f"gen_expiry:{gen_id}"),
                 InlineKeyboardButton(text="📝 یادداشت", callback_data=f"gen_note:{gen_id}"),
             ],
+            [InlineKeyboardButton(text="⛔ اتمام اشتراک", callback_data=f"gen_end:{gen_id}")],
             [InlineKeyboardButton(text="🗑 حذف این اشتراک", callback_data=f"gen_delete:{gen_id}")],
             [InlineKeyboardButton(text="« بازگشت به لیست", callback_data="gens_back")],
         ]
@@ -1918,6 +1919,52 @@ async def gen_clear_note(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
     await callback.answer("یادداشت پاک شد")
+
+
+
+@dp.callback_query(F.data.regexp(r"^gen_end:\d+$"))
+async def gen_end_confirm(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("اجازه نداری.", show_alert=True)
+    gen_id = int(callback.data.split(":")[1])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ بله، تمام کن", callback_data=f"gen_end_yes:{gen_id}"),
+                InlineKeyboardButton(text="❌ انصراف", callback_data=f"gen_open:{gen_id}"),
+            ],
+        ]
+    )
+    await callback.message.edit_text(
+        f"⛔ اتمام اشتراک <b>{escape(g['name'])}</b>\n\n"
+        "با تأیید، در کلاینت فقط کانفیگ «اشتراک شما به اتمام رسیده» نمایش داده می‌شود "
+        "(مثل وقتی که اشتراک منقضی شده). این عمل قابل برگشت با «تغییر انقضا» است.",
+        reply_markup=kb,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(r"^gen_end_yes:\d+$"))
+async def gen_end_yes(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("اجازه نداری.", show_alert=True)
+    gen_id = int(callback.data.split(":")[1])
+    # تنظیم انقضا به همین لحظه → is_generated_expired = True
+    now_iso = datetime.now(timezone.utc).isoformat()
+    storage.update_generated_expiry(gen_id, callback.from_user.id, now_iso)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("پیدا نشد.", show_alert=True)
+    await callback.message.edit_text(
+        gen_detail_text(g) + "\n\n✅ اشتراک به حالت «اتمام‌یافته» درآمد.",
+        reply_markup=build_gen_detail_keyboard(gen_id),
+        parse_mode="HTML",
+    )
+    await callback.answer("اشتراک تمام شد.")
 
 
 @dp.callback_query(F.data.regexp(r"^gen_delete:\d+$"))

@@ -146,7 +146,7 @@ def remaining_time_text(expires_at: str | None) -> str:
         exp_dt = datetime.fromisoformat(expires_at)
         now = datetime.now(timezone.utc)
         if exp_dt <= now:
-            return "⛔ اشتراک منقضی شده"
+            return "⛔ اشتراک شما به اتمام رسیده"
         delta = exp_dt - now
         days = delta.days
         hours = delta.seconds // 3600

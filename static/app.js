@@ -945,6 +945,8 @@ function renderGenDetail(gen) {
     if (expBtn) expBtn.addEventListener("click", () => openChangeExpiry(gen));
     const noteBtn = document.getElementById("edit-gen-note-btn");
     if (noteBtn) noteBtn.addEventListener("click", () => openEditGenNote(gen));
+    const endBtn = document.getElementById("end-gen-btn");
+    if (endBtn) endBtn.addEventListener("click", () => confirmEndGen(gen));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
     });
@@ -990,6 +992,7 @@ function renderGenDetail(gen) {
         <button class="btn-sm btn" id="copy-gen-url">${icon("copy", "icon-sm")} کپی لینک</button>
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
         <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
+        <button class="btn-sm btn btn-danger" id="end-gen-btn">⛔ اتمام اشتراک</button>
         <button class="btn" id="add-to-gen-btn">${icon("plus", "icon-sm")} افزودن کانفیگ از اشتراک دیگر</button>
       </div>
       <div class="qr-box" style="margin-top:16px;text-align:center">
@@ -1044,6 +1047,33 @@ function confirmDeleteGenConfig(gen, idx) {
       state.currentGen = await api("DELETE", `/api/generated/${gen.id}/configs/${idx}`);
       closeModal();
       toast("حذف شد");
+      render();
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+
+function confirmEndGen(gen) {
+  openModal(`
+    <h2>⛔ اتمام اشتراک</h2>
+    <p style="margin:12px 0;color:var(--text-secondary);line-height:1.6">
+      با تأیید، در کلاینت فقط کانفیگ <b>«اشتراک شما به اتمام رسیده»</b> نمایش داده می‌شود
+      (مثل وقتی که اشتراک منقضی شده). می‌توانی بعداً با «تغییر انقضا» دوباره فعالش کنی.
+    </p>
+    <div class="modal-actions">
+      <button class="btn-outline btn" id="cancel-btn">انصراف</button>
+      <button class="btn btn-danger" id="confirm-btn">بله، تمام کن</button>
+    </div>
+  `);
+  document.getElementById("cancel-btn").addEventListener("click", closeModal);
+  document.getElementById("confirm-btn").addEventListener("click", async () => {
+    try {
+      const updated = await api("POST", `/api/generated/${gen.id}/end`, {});
+      Object.assign(state.currentGen, updated);
+      // refresh full detail
+      state.currentGen = await api("GET", `/api/generated/${gen.id}`);
+      closeModal();
+      toast("اشتراک به حالت اتمام‌یافته درآمد");
       render();
     } catch (e) { toast(e.message, true); }
   });
