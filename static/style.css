@@ -481,34 +481,42 @@ a:hover { color: var(--gold-bright); }
   border-color: rgba(212, 175, 55, 0.85);
 }
 
-/* Small / icon actions — نزدیک به speed-dial دایره‌ای */
+/* Small actions — pill متناسب با متن (نه دایره اجباری) */
 .btn-sm {
-  padding: 8px 12px;
-  font-size: 0.76rem;
+  padding: 8px 14px;
+  font-size: 0.78rem;
   font-weight: 600;
-  min-height: 34px;
+  min-height: 36px;
   border-radius: 14px;
   background: rgba(18, 24, 36, 0.9);
   color: var(--text-secondary);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  white-space: nowrap; /* متن کوتاه داخل یک خط بماند */
+  width: auto;
+  height: auto;
+  max-width: none;
 }
 .btn-sm:hover {
   color: #fff;
   border-color: rgba(212, 175, 55, 0.55);
   background: rgba(24, 32, 48, 0.98);
-  transform: scale(1.1);
+  transform: scale(1.04);
   box-shadow:
     0 0 18px rgba(212, 175, 55, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* فقط آیکون (بدون متن زیاد) کمی گردتر */
-.btn-sm:not(:has(span:not(.icon))):has(.icon) {
+/* فقط دکمه‌های صرفاً آیکون (کلاس btn-icon) دایره‌ای بمانند */
+.btn-sm.btn-icon {
   width: 36px;
   height: 36px;
+  min-height: 36px;
   padding: 0;
   border-radius: 50%;
+  gap: 0;
 }
 
 .btn-outline {
@@ -795,7 +803,15 @@ label:first-child { margin-top: 0; }
 }
 
 .action-bar {
-  display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  align-items: center;
+}
+.action-bar .btn,
+.action-bar .btn-sm {
+  flex: 0 0 auto; /* اندازه بر اساس محتوا */
 }
 
 /* Modal — centered overlay (viewport-fixed, matte edges) */
