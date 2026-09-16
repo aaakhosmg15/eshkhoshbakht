@@ -526,6 +526,7 @@ function renderSubDetail(sub) {
         <div>
           <div class="detail-title">${esc(sub.name)}</div>
           <div class="detail-meta">${sub.config_count} کانفیگ · ${fmtDate(sub.updated_at)}</div>
+      <div class="detail-meta" style="margin-top:6px">📶 آخرین پینگ موفق: ${sub.last_successful_ping ? fmtDate(sub.last_successful_ping) : "هنوز انجام نشده"}</div>
         </div>
         <button class="btn-sm btn btn-danger" id="delete-sub-btn">${icon("trash", "icon-sm")} حذف</button>
       </div>
@@ -610,14 +611,66 @@ function confirmDeleteSub(sub) {
 }
 
 async function pingSub(id) {
-  toast(`در حال پینگ ${state.currentSub.configs.length} کانفیگ...`);
+  const n = (state.currentSub && state.currentSub.configs) ? state.currentSub.configs.length : 0;
+  toast(`در حال پینگ ${n} کانفیگ...`);
   try {
-    const results = await api("GET", `/api/subs/${id}/ping`);
+    const data = await api("GET", `/api/subs/${id}/ping`);
+    const results = data.results || data;
     state.pingResults = {};
     results.forEach((r) => { state.pingResults[r.index] = r.ms; });
+    if (state.currentSub) {
+      state.currentSub.last_successful_ping = data.alive > 0 ? new Date().toISOString() : state.currentSub.last_successful_ping;
+    }
     render();
-    toast("پینگ تمام شد");
+    showPingChart(results, data.alive, data.dead, data.total);
+    toast(`پینگ تمام شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
+}
+
+async function pingGenerated(id) {
+  const n = (state.currentGen && state.currentGen.configs) ? state.currentGen.configs.length : 0;
+  toast(`در حال پینگ ${n} کانفیگ...`);
+  try {
+    const data = await api("GET", `/api/generated/${id}/ping`);
+    const results = data.results || data;
+    state.pingResults = {};
+    results.forEach((r) => { state.pingResults[r.index] = r.ms; });
+    if (state.currentGen && data.alive > 0) {
+      state.currentGen.last_successful_ping = new Date().toISOString();
+    }
+    render();
+    showPingChart(results, data.alive, data.dead, data.total);
+    toast(`پینگ تمام شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
+  } catch (e) { toast(e.message, true); }
+}
+
+function showPingChart(results, alive, dead, total) {
+  const maxMs = Math.max(1, ...results.filter((r) => r.ms != null).map((r) => r.ms));
+  const bars = results.map((r) => {
+    const ok = r.ms != null;
+    const pct = ok ? Math.max(8, Math.round((r.ms / maxMs) * 100)) : 100;
+    const cls = !ok ? "ping-bar-dead" : r.ms < 90 ? "ping-bar-good" : r.ms < 180 ? "ping-bar-mid" : "ping-bar-bad";
+    const label = ok ? `${Math.round(r.ms)} ms` : "تایم‌اوت";
+    return `
+      <div class="ping-row">
+        <div class="ping-label"><span class="badge">${esc(r.protocol || "")}</span> ${esc(r.remark || "(بدون نام)")}</div>
+        <div class="ping-track"><div class="ping-bar ${cls}" style="width:${pct}%"></div></div>
+        <div class="ping-ms ${ok ? "" : "ping-ms-dead"}">${label}</div>
+      </div>`;
+  }).join("");
+  openModal(`
+    <h2>📶 نتیجه پینگ</h2>
+    <div class="ping-summary">
+      <span class="ping-pill good">زنده ${alive ?? "—"}</span>
+      <span class="ping-pill dead">مرده ${dead ?? "—"}</span>
+      <span class="ping-pill">کل ${total ?? results.length}</span>
+    </div>
+    <div class="ping-chart">${bars || '<div class="empty-state">نتیجه‌ای نیست</div>'}</div>
+    <div class="modal-actions">
+      <button class="btn" id="close-ping-btn">بستن</button>
+    </div>
+  `);
+  document.getElementById("close-ping-btn").addEventListener("click", closeModal);
 }
 
 async function previewDeadConfigs(sub) {
@@ -922,10 +975,22 @@ async function openGen(id) {
 }
 
 function renderGenDetail(gen) {
-  const rows = (gen.configs || []).map((c) => `
+  const rows = (gen.configs || []).map((c) => {
+    const ms = state.pingResults ? state.pingResults[c.index] : undefined;
+    let msBadge = "";
+    if (ms !== undefined) {
+      if (ms === null) {
+        msBadge = '<span class="badge badge-dead">تایم‌اوت</span>';
+      } else {
+        const tier = ms < 90 ? "badge-ping-good" : ms < 180 ? "badge-ping-mid" : "badge-ping-bad";
+        msBadge = `<span class="badge ${tier}">${Math.round(ms)} ms</span>`;
+      }
+    }
+    return `
     <div class="config-row">
       <span class="badge">${esc(c.protocol)}</span>
       <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
+      ${msBadge}
       <div class="config-actions gooey">
         <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا">↑</button>
         <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین">↓</button>
@@ -933,7 +998,8 @@ function renderGenDetail(gen) {
         <button class="btn-sm btn btn-danger btn-icon" data-gen-del="${c.index}" title="حذف">${icon("trash", "icon-sm")}</button>
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   setTimeout(() => {
     document.getElementById("back-to-gens").addEventListener("click", () => {
@@ -953,6 +1019,8 @@ function renderGenDetail(gen) {
     if (reviveBtn) reviveBtn.addEventListener("click", () => openReviveGen(gen));
     const custBtn = document.getElementById("cust-msg-btn");
     if (custBtn) custBtn.addEventListener("click", () => openCustomerMessage(gen));
+    const pingGen = document.getElementById("ping-gen-btn");
+    if (pingGen) pingGen.addEventListener("click", () => pingGenerated(gen.id));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
     });
@@ -988,9 +1056,13 @@ function renderGenDetail(gen) {
   const custHtml = gen.customer_message
     ? `<div class="detail-meta" style="margin-top:8px;color:var(--accent)">📢 پیام مشتری: ${esc(gen.customer_message)}</div>`
     : "";
+  const fetchCount = gen.client_fetch_count || 0;
   const lastFetchHtml = gen.last_client_fetch
-    ? `<div class="detail-meta" style="margin-top:8px">👁 آخرین آپدیت مشتری: ${fmtDate(gen.last_client_fetch)}</div>`
+    ? `<div class="detail-meta" style="margin-top:8px">👁 آخرین آپدیت مشتری: ${fmtDate(gen.last_client_fetch)} (جمع: ${fetchCount})</div>`
     : `<div class="detail-meta" style="margin-top:8px;opacity:.75">👁 آخرین آپدیت مشتری: هنوز آپدیت نشده</div>`;
+  const lastPingHtml = gen.last_successful_ping
+    ? `<div class="detail-meta" style="margin-top:8px">📶 آخرین پینگ موفق: ${fmtDate(gen.last_successful_ping)}</div>`
+    : `<div class="detail-meta" style="margin-top:8px;opacity:.75">📶 آخرین پینگ موفق: هنوز انجام نشده</div>`;
 
   return `
     <button class="back-link" id="back-to-gens">${icon("back", "icon-sm")} بازگشت</button>
@@ -1003,6 +1075,7 @@ function renderGenDetail(gen) {
           ${noteHtml}
           ${custHtml}
           ${lastFetchHtml}
+          ${lastPingHtml}
         </div>
         <button class="btn-sm btn btn-danger" id="delete-gen-btn">${icon("trash", "icon-sm")} حذف</button>
       </div>
@@ -1010,6 +1083,7 @@ function renderGenDetail(gen) {
       <code class="url">${esc(gen.url)}</code>
       <div class="action-bar">
         <button class="btn-sm btn" id="copy-gen-url">${icon("copy", "icon-sm")} کپی لینک</button>
+        <button class="btn-sm btn" id="ping-gen-btn">${icon("ping", "icon-sm")} پینگ</button>
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
         <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
         <button class="btn-sm btn" id="cust-msg-btn">📢 پیام مشتری</button>

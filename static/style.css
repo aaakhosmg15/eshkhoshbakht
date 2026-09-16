@@ -1621,3 +1621,39 @@ html.tg-miniapp.modal-open {
     cursor: auto !important;
   }
 }
+
+
+/* ---- نمودار پینگ ---- */
+.ping-summary {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px;
+}
+.ping-pill {
+  font-size: .8rem; font-weight: 600; padding: 6px 12px; border-radius: 999px;
+  background: var(--gold-dim); color: var(--gold);
+}
+.ping-pill.good { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+.ping-pill.dead { background: var(--danger-dim); color: var(--danger); }
+.ping-chart { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.ping-row {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) 72px;
+  gap: 10px; align-items: center;
+}
+.ping-label {
+  font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
+.ping-track {
+  height: 10px; border-radius: 999px; background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.ping-bar { height: 100%; border-radius: 999px; transition: width .35s ease; }
+.ping-bar-good { background: linear-gradient(90deg, #1abc9c, #2ecc71); }
+.ping-bar-mid { background: linear-gradient(90deg, #f39c12, #f1c40f); }
+.ping-bar-bad { background: linear-gradient(90deg, #e67e22, #e74c3c); }
+.ping-bar-dead { background: linear-gradient(90deg, #7f1d1d, #ef4444); opacity: .85; }
+.ping-ms { font-size: .78rem; font-weight: 600; text-align: left; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.ping-ms-dead { color: var(--danger); }
+@media (max-width: 520px) {
+  .ping-row { grid-template-columns: 1fr 56px; }
+  .ping-label { grid-column: 1 / -1; }
+}

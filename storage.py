@@ -71,6 +71,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if gen_cols and "last_client_fetch" not in gen_cols:
         conn.execute("ALTER TABLE generated_subs ADD COLUMN last_client_fetch TEXT")
         conn.commit()
+    gen_cols = {row[1] for row in conn.execute("PRAGMA table_info(generated_subs)").fetchall()}
+    if gen_cols and "client_fetch_count" not in gen_cols:
+        conn.execute("ALTER TABLE generated_subs ADD COLUMN client_fetch_count INTEGER DEFAULT 0")
+        conn.commit()
+    gen_cols = {row[1] for row in conn.execute("PRAGMA table_info(generated_subs)").fetchall()}
+    if gen_cols and "last_successful_ping" not in gen_cols:
+        conn.execute("ALTER TABLE generated_subs ADD COLUMN last_successful_ping TEXT")
+        conn.commit()
+    sub_cols = {row[1] for row in conn.execute("PRAGMA table_info(subs)").fetchall()}
+    if sub_cols and "last_successful_ping" not in sub_cols:
+        conn.execute("ALTER TABLE subs ADD COLUMN last_successful_ping TEXT")
+        conn.commit()
 
 
 def _conn():
@@ -83,7 +95,8 @@ def _conn():
             note TEXT,
             sub_url TEXT NOT NULL,
             configs TEXT NOT NULL,
-            updated_at TEXT
+            updated_at TEXT,
+            last_successful_ping TEXT
         )"""
     )
     conn.execute(
@@ -98,7 +111,9 @@ def _conn():
             items TEXT,
             note TEXT,
             customer_message TEXT,
-            last_client_fetch TEXT
+            last_client_fetch TEXT,
+            client_fetch_count INTEGER DEFAULT 0,
+            last_successful_ping TEXT
         )"""
     )
     _migrate(conn)
@@ -123,12 +138,14 @@ def add_sub(user_id: int, name: str, note: str, sub_url: str, configs: list[str]
 def list_subs(user_id: int) -> list[dict]:
     conn = _conn()
     rows = conn.execute(
-        "SELECT id, name, note, sub_url, configs, updated_at FROM subs WHERE user_id=? ORDER BY id",
+        "SELECT id, name, note, sub_url, configs, updated_at, last_successful_ping FROM subs WHERE user_id=? ORDER BY id",
         (user_id,),
     ).fetchall()
     conn.close()
     result = []
-    for sub_id, name, note, sub_url, configs_json, updated_at in rows:
+    for row in rows:
+        sub_id, name, note, sub_url, configs_json, updated_at = row[:6]
+        last_successful_ping = row[6] if len(row) > 6 else ""
         configs = json.loads(configs_json)
         result.append(
             {
@@ -138,6 +155,7 @@ def list_subs(user_id: int) -> list[dict]:
                 "sub_url": sub_url,
                 "config_count": len(configs),
                 "updated_at": updated_at or "",
+                "last_successful_ping": last_successful_ping or "",
             }
         )
     return result
@@ -146,13 +164,14 @@ def list_subs(user_id: int) -> list[dict]:
 def get_sub(sub_id: int, user_id: int) -> dict | None:
     conn = _conn()
     row = conn.execute(
-        "SELECT id, name, note, sub_url, configs, updated_at FROM subs WHERE id=? AND user_id=?",
+        "SELECT id, name, note, sub_url, configs, updated_at, last_successful_ping FROM subs WHERE id=? AND user_id=?",
         (sub_id, user_id),
     ).fetchone()
     conn.close()
     if not row:
         return None
-    sid, name, note, sub_url, configs_json, updated_at = row
+    sid, name, note, sub_url, configs_json, updated_at = row[:6]
+    last_successful_ping = row[6] if len(row) > 6 else ""
     return {
         "id": sid,
         "name": name,
@@ -160,7 +179,9 @@ def get_sub(sub_id: int, user_id: int) -> dict | None:
         "sub_url": sub_url,
         "configs": json.loads(configs_json),
         "updated_at": updated_at or "",
+        "last_successful_ping": last_successful_ping or "",
     }
+
 
 
 def update_configs(sub_id: int, user_id: int, configs: list[str]) -> None:
@@ -230,21 +251,27 @@ def create_generated_sub(
 
 
 def _row_to_generated(row) -> dict:
-    """پشتیبانی از شکل‌های قدیمی و جدید (customer_message / last_client_fetch)."""
-    # ترتیب: id, user_id, name, token, configs, created_at, expires_at, items, note,
-    #         customer_message, last_client_fetch
+    """پشتیبانی از شکل‌های قدیمی و جدید."""
+    # id, user_id, name, token, configs, created_at, expires_at, items, note,
+    # customer_message, last_client_fetch, client_fetch_count, last_successful_ping
     n = len(row)
     gid, user_id, name, tok, configs_json, created_at, expires_at = row[:7]
     items_json = row[7] if n >= 8 else None
     note = row[8] if n >= 9 else ""
     customer_message = row[9] if n >= 10 else ""
-    last_client_fetch = row[10] if n >= 11 else None
+    last_client_fetch = row[10] if n >= 11 else ""
+    client_fetch_count = row[11] if n >= 12 else 0
+    last_successful_ping = row[12] if n >= 13 else ""
     items = None
     if items_json:
         try:
             items = json.loads(items_json)
         except Exception:
             items = None
+    try:
+        client_fetch_count = int(client_fetch_count or 0)
+    except (TypeError, ValueError):
+        client_fetch_count = 0
     return {
         "id": gid,
         "user_id": user_id,
@@ -257,13 +284,15 @@ def _row_to_generated(row) -> dict:
         "note": note or "",
         "customer_message": customer_message or "",
         "last_client_fetch": last_client_fetch or "",
+        "client_fetch_count": client_fetch_count,
+        "last_successful_ping": last_successful_ping or "",
     }
 
 
 def get_generated_by_token(token: str) -> dict | None:
     conn = _conn()
     row = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch FROM generated_subs WHERE token=?",
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping FROM generated_subs WHERE token=?",
         (token,),
     ).fetchone()
     conn.close()
@@ -275,7 +304,7 @@ def get_generated_by_token(token: str) -> dict | None:
 def get_generated_by_id(gen_id: int, user_id: int) -> dict | None:
     conn = _conn()
     row = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch FROM generated_subs WHERE id=? AND user_id=?",
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping FROM generated_subs WHERE id=? AND user_id=?",
         (gen_id, user_id),
     ).fetchone()
     conn.close()
@@ -289,7 +318,7 @@ def list_generated_subs(user_id: int) -> list[dict]:
     cleanup_old_expired_generated()
     conn = _conn()
     rows = conn.execute(
-        "SELECT id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch FROM generated_subs WHERE user_id=? ORDER BY id DESC",
+        "SELECT id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping FROM generated_subs WHERE user_id=? ORDER BY id DESC",
         (user_id,),
     ).fetchall()
     conn.close()
@@ -300,6 +329,8 @@ def list_generated_subs(user_id: int) -> list[dict]:
         note = row[7] if len(row) > 7 else ""
         customer_message = row[8] if len(row) > 8 else ""
         last_client_fetch = row[9] if len(row) > 9 else ""
+        client_fetch_count = row[10] if len(row) > 10 else 0
+        last_successful_ping = row[11] if len(row) > 11 else ""
         configs = json.loads(configs_json)
         items = None
         if items_json:
@@ -307,6 +338,10 @@ def list_generated_subs(user_id: int) -> list[dict]:
                 items = json.loads(items_json)
             except Exception:
                 items = None
+        try:
+            client_fetch_count = int(client_fetch_count or 0)
+        except (TypeError, ValueError):
+            client_fetch_count = 0
         result.append(
             {
                 "id": gid,
@@ -319,6 +354,8 @@ def list_generated_subs(user_id: int) -> list[dict]:
                 "note": note or "",
                 "customer_message": customer_message or "",
                 "last_client_fetch": last_client_fetch or "",
+                "client_fetch_count": client_fetch_count,
+                "last_successful_ping": last_successful_ping or "",
             }
         )
     return result
@@ -394,11 +431,31 @@ def update_generated_customer_message(gen_id: int, user_id: int, message: str) -
 
 
 def touch_generated_client_fetch(token: str) -> None:
-    """ثبت زمان آخرین بار که مشتری لینک ساب را باز/آپدیت کرد."""
+    """ثبت زمان و شمارش آخرین بار که مشتری لینک ساب را باز/آپدیت کرد."""
     conn = _conn()
     conn.execute(
-        "UPDATE generated_subs SET last_client_fetch=? WHERE token=?",
+        "UPDATE generated_subs SET last_client_fetch=?, client_fetch_count=COALESCE(client_fetch_count, 0) + 1 WHERE token=?",
         (_now_iso(), token),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_sub_last_successful_ping(sub_id: int, user_id: int) -> None:
+    conn = _conn()
+    conn.execute(
+        "UPDATE subs SET last_successful_ping=? WHERE id=? AND user_id=?",
+        (_now_iso(), sub_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_generated_last_successful_ping(gen_id: int, user_id: int) -> None:
+    conn = _conn()
+    conn.execute(
+        "UPDATE generated_subs SET last_successful_ping=? WHERE id=? AND user_id=?",
+        (_now_iso(), gen_id, user_id),
     )
     conn.commit()
     conn.close()
@@ -711,16 +768,17 @@ def export_full_backup() -> dict:
     """
     conn = _conn()
     subs_rows = conn.execute(
-        "SELECT id, user_id, name, note, sub_url, configs, updated_at FROM subs ORDER BY id"
+        "SELECT id, user_id, name, note, sub_url, configs, updated_at, last_successful_ping FROM subs ORDER BY id"
     ).fetchall()
     gen_rows = conn.execute(
-        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch FROM generated_subs ORDER BY id"
+        "SELECT id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping FROM generated_subs ORDER BY id"
     ).fetchall()
     conn.close()
 
     subs = []
     for row in subs_rows:
-        sid, user_id, name, note, sub_url, configs_json, updated_at = row
+        sid, user_id, name, note, sub_url, configs_json, updated_at = row[:7]
+        last_successful_ping = row[7] if len(row) > 7 else ""
         subs.append(
             {
                 "id": sid,
@@ -730,6 +788,7 @@ def export_full_backup() -> dict:
                 "sub_url": sub_url,
                 "configs": json.loads(configs_json),
                 "updated_at": updated_at or "",
+                "last_successful_ping": last_successful_ping or "",
             }
         )
 
@@ -740,12 +799,18 @@ def export_full_backup() -> dict:
         note = row[8] if len(row) > 8 else ""
         customer_message = row[9] if len(row) > 9 else ""
         last_client_fetch = row[10] if len(row) > 10 else ""
+        client_fetch_count = row[11] if len(row) > 11 else 0
+        last_successful_ping = row[12] if len(row) > 12 else ""
         items = None
         if items_json:
             try:
                 items = json.loads(items_json)
             except Exception:
                 items = None
+        try:
+            client_fetch_count = int(client_fetch_count or 0)
+        except (TypeError, ValueError):
+            client_fetch_count = 0
         generated.append(
             {
                 "id": gid,
@@ -759,6 +824,8 @@ def export_full_backup() -> dict:
                 "note": note or "",
                 "customer_message": customer_message or "",
                 "last_client_fetch": last_client_fetch or "",
+                "client_fetch_count": client_fetch_count,
+                "last_successful_ping": last_successful_ping or "",
             }
         )
 
@@ -809,7 +876,7 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
             sid = s.get("id")
             if sid is not None and replace:
                 conn.execute(
-                    "INSERT INTO subs (id, user_id, name, note, sub_url, configs, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO subs (id, user_id, name, note, sub_url, configs, updated_at, last_successful_ping) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         int(sid),
                         int(s["user_id"]),
@@ -818,11 +885,12 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
                         s.get("sub_url") or "",
                         json.dumps(configs),
                         s.get("updated_at") or _now_iso(),
+                        s.get("last_successful_ping") or "",
                     ),
                 )
             else:
                 conn.execute(
-                    "INSERT INTO subs (user_id, name, note, sub_url, configs, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO subs (user_id, name, note, sub_url, configs, updated_at, last_successful_ping) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         int(s["user_id"]),
                         s.get("name") or "بدون نام",
@@ -830,6 +898,7 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
                         s.get("sub_url") or "",
                         json.dumps(configs),
                         s.get("updated_at") or _now_iso(),
+                        s.get("last_successful_ping") or "",
                     ),
                 )
 
@@ -845,7 +914,7 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
             gid = g.get("id")
             if gid is not None and replace:
                 conn.execute(
-                    "INSERT INTO generated_subs (id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO generated_subs (id, user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         int(gid),
                         int(g["user_id"]),
@@ -858,11 +927,13 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
                         g.get("note") or "",
                         g.get("customer_message") or "",
                         g.get("last_client_fetch") or "",
+                        int(g.get("client_fetch_count") or 0),
+                        g.get("last_successful_ping") or "",
                     ),
                 )
             else:
                 conn.execute(
-                    "INSERT INTO generated_subs (user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO generated_subs (user_id, name, token, configs, created_at, expires_at, items, note, customer_message, last_client_fetch, client_fetch_count, last_successful_ping) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         int(g["user_id"]),
                         g.get("name") or "بدون نام",
@@ -874,6 +945,8 @@ def import_full_backup(data: dict, replace: bool = True) -> dict:
                         g.get("note") or "",
                         g.get("customer_message") or "",
                         g.get("last_client_fetch") or "",
+                        int(g.get("client_fetch_count") or 0),
+                        g.get("last_successful_ping") or "",
                     ),
                 )
 

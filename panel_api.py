@@ -57,6 +57,7 @@ def _sub_summary(sub: dict) -> dict:
         "sub_url": sub["sub_url"],
         "config_count": sub.get("config_count", len(sub.get("configs", []))),
         "updated_at": sub.get("updated_at", ""),
+        "last_successful_ping": sub.get("last_successful_ping") or "",
     }
 
 
@@ -78,6 +79,8 @@ def _gen_summary(gen: dict, request: web.Request) -> dict:
         "note": gen.get("note") or "",
         "customer_message": gen.get("customer_message") or "",
         "last_client_fetch": gen.get("last_client_fetch") or "",
+        "client_fetch_count": int(gen.get("client_fetch_count") or 0),
+        "last_successful_ping": gen.get("last_successful_ping") or "",
         "url": _make_url(gen["token"], request),
         "live": bool(gen.get("items")),
     }
@@ -212,13 +215,17 @@ async def api_ping_sub(request: web.Request) -> web.Response:
         return _err("اشتراک پیدا نشد.", 404)
 
     results = await ping_configs(sub["configs"])
+    if any(ms is not None for ms in results.values()):
+        storage.set_sub_last_successful_ping(sub_id, request["user_id"])
     out = []
     for i, raw in enumerate(sub["configs"]):
         out.append(
             {"index": i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": results.get(i)}
         )
     out.sort(key=lambda r: (r["ms"] is None, r["ms"] if r["ms"] is not None else 0))
-    return web.json_response(out)
+    alive = sum(1 for r in out if r["ms"] is not None)
+    dead = len(out) - alive
+    return web.json_response({"results": out, "alive": alive, "dead": dead, "total": len(out)})
 
 
 async def api_delete_dead(request: web.Request) -> web.Response:
@@ -630,6 +637,32 @@ async def api_backup_restore(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, **result})
 
 
+
+async def api_ping_generated(request: web.Request) -> web.Response:
+    """پینگ کانفیگ‌های یک اشتراک سفارشی (با resolve لایو)."""
+    gen_id = int(request.match_info["gen_id"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    try:
+        await _refresh_source_subs_for_gen(gen)
+    except Exception:
+        pass
+    configs = storage.resolve_generated_configs(gen, persist=True)
+    results = await ping_configs(configs)
+    if any(ms is not None for ms in results.values()):
+        storage.set_generated_last_successful_ping(gen_id, request["user_id"])
+    out = []
+    for i, raw in enumerate(configs):
+        out.append(
+            {"index": i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": results.get(i)}
+        )
+    out.sort(key=lambda r: (r["ms"] is None, r["ms"] if r["ms"] is not None else 0))
+    alive = sum(1 for r in out if r["ms"] is not None)
+    dead = len(out) - alive
+    return web.json_response({"results": out, "alive": alive, "dead": dead, "total": len(out)})
+
+
 def add_routes(app: web.Application) -> None:
     app.router.add_get("/api/subs", api_list_subs)
     app.router.add_post("/api/subs", api_add_sub)
@@ -640,6 +673,7 @@ def add_routes(app: web.Application) -> None:
     app.router.add_get("/api/subs/{sub_id}/export", api_export_sub)
     app.router.add_post("/api/subs/{sub_id}/configs/{idx}/rename", api_rename_config)
     app.router.add_get("/api/subs/{sub_id}/ping", api_ping_sub)
+    app.router.add_get("/api/generated/{gen_id}/ping", api_ping_generated)
     app.router.add_post("/api/subs/{sub_id}/delete-dead", api_delete_dead)
     app.router.add_post("/api/build-custom", api_build_custom)
     app.router.add_get("/api/generated", api_list_generated)

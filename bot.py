@@ -207,10 +207,16 @@ def gen_detail_text(g: dict) -> str:
     cust = (g.get("customer_message") or "").strip()
     cust_line = f"📢 پیام مشتری: {escape(cust)}\n" if cust else ""
     last_fetch = (g.get("last_client_fetch") or "").strip()
+    fetch_count = int(g.get("client_fetch_count") or 0)
     if last_fetch:
-        fetch_line = f"👁 آخرین آپدیت مشتری: {_format_updated_at(last_fetch)}\n"
+        fetch_line = f"👁 آخرین آپدیت مشتری: {_format_updated_at(last_fetch)} (جمع: {fetch_count})\n"
     else:
         fetch_line = "👁 آخرین آپدیت مشتری: هنوز آپدیت نشده\n"
+    last_ping = (g.get("last_successful_ping") or "").strip()
+    if last_ping:
+        ping_line = f"📶 آخرین پینگ موفق: {_format_updated_at(last_ping)}\n"
+    else:
+        ping_line = "📶 آخرین پینگ موفق: هنوز انجام نشده\n"
     text = (
         f"🛠 <b>{escape(g['name'])}</b>\n"
         f"📦 {len(g['configs'])} کانفیگ\n"
@@ -220,7 +226,8 @@ def gen_detail_text(g: dict) -> str:
         f"{live_line}"
         f"{note_line}"
         f"{cust_line}"
-        f"{fetch_line}\n"
+        f"{fetch_line}"
+        f"{ping_line}\n"
         f"🔗 لینک اشتراک:\n<code>{url}</code>"
     )
     return text
@@ -465,6 +472,11 @@ def sub_detail_text(sub: dict) -> str:
         text += f"📝 {escape(sub['note'])}\n"
     updated = _format_updated_at(sub.get("updated_at", ""))
     text += f"🕒 آخرین بروزرسانی: {updated}\n"
+    last_ping = (sub.get("last_successful_ping") or "").strip()
+    if last_ping:
+        text += f"📶 آخرین پینگ موفق: {_format_updated_at(last_ping)}\n"
+    else:
+        text += "📶 آخرین پینگ موفق: هنوز انجام نشده\n"
     text += f"\n{len(sub['configs'])} کانفیگ — یکی رو انتخاب کن:"
     return text
 
@@ -2316,6 +2328,8 @@ async def ping_sub(callback: CallbackQuery):
     await callback.answer()
     status = await callback.message.answer(f"در حال پینگ {len(sub['configs'])} کانفیگ...")
     results = await ping_configs(sub["configs"])
+    if any(ms is not None for ms in results.values()):
+        storage.set_sub_last_successful_ping(sub_id, callback.from_user.id)
     chunks = _format_ping_lines(sub["name"], sub["configs"], results)
     await status.edit_text(chunks[0], parse_mode="HTML")
     for chunk in chunks[1:]:
