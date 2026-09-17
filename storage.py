@@ -1,17 +1,28 @@
 """
 ذخیره‌سازی چند اشتراک برای هر کاربر، با SQLite.
-برای پایداری روی Railway، این مسیر رو باید روی یک Volume مانت کنی (مثلا /app/data)،
-وگرنه با هر دیپلوی جدید پاک میشه.
+
+پایداری روی Railway:
+  - Volume را روی مسیر /app/data مانت کن
+  - DB_PATH پیش‌فرض: /app/data/bot.db (اگر متغیر ست نشود)
+  - بدون Volume، با هر دیپلوی/ری‌استارت داده از بین می‌رود
 """
 import json
+import logging
 import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(os.environ.get("DB_PATH", "data/bot.db"))
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+logger = logging.getLogger(__name__)
+
+# اولویت: DB_PATH از env → در غیر این صورت /app/data/bot.db روی سرور، data/bot.db محلی
+_default_db = "/app/data/bot.db" if Path("/app/data").is_dir() or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") else "data/bot.db"
+DB_PATH = Path(os.environ.get("DB_PATH", _default_db)).expanduser().resolve()
+try:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+except OSError as e:
+    logger.error("نمی‌توان پوشه دیتابیس را ساخت (%s): %s — Volume را چک کن", DB_PATH.parent, e)
 
 
 NEW_COLUMNS = {"id", "user_id", "name", "note", "sub_url", "configs", "updated_at"}
@@ -86,7 +97,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 
 def _conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30)
+    # پایداری بهتر روی Volume / ری‌استارت
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS subs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

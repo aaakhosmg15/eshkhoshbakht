@@ -99,27 +99,48 @@ eshkhoshbakht/
 | `BOT_TOKEN` | بله | توکن BotFather |
 | `ADMIN_IDS` | توصیه‌شده | آیدی عددی تلگرام (با کاما جدا). خالی = همه دسترسی دارند |
 | `BASE_URL` | بله برای لینک کامل | مثلاً `https://xxx.up.railway.app` بدون اسلش آخر |
-| `DB_PATH` | خیر | پیش‌فرض `data/bot.db` |
+| `DB_PATH` | بله روی Railway | حتماً `/app/data/bot.db` + Volume روی `/app/data` |
 | `PORT` | خیر | Railway خودش ست می‌کند (پیش‌فرض ۸۰۸۰) |
 
 ---
 
-## دیپلوی روی Railway
+## دیپلوی روی Railway (داده پایدار با Volume)
+
+بدون Volume با هر دیپلوی یا ری‌استارت، فایل SQLite پاک می‌شود و همه اشتراک‌ها از بین می‌روند.
+
+### مراحل
 
 1. ریپو را به GitHub پوش کن.
-2. در Railway پروژه جدید بساز → **Deploy from GitHub repo**.
-3. Variables را طبق جدول بالا ست کن (مخصوصاً `BASE_URL`).
-4. یک **Volume** بساز و mount path را بگذار: `/app/data`  
-   تا دیتابیس با هر دیپلوی پاک نشود.
-5. Deploy بزن.
+2. در [Railway](https://railway.app) پروژه جدید بساز → **Deploy from GitHub repo**.
+3. در تب **Variables** این‌ها را ست کن:
 
-ربات همزمان:
-- polling تلگرام را اجرا می‌کند
-- روی پورت Railway سرور HTTP برای `/sub/{token}` و `/health` بالا می‌آورد
+| متغیر | مثال |
+|-------|------|
+| `BOT_TOKEN` | توکن BotFather |
+| `ADMIN_IDS` | آیدی عددی تلگرام |
+| `BASE_URL` | `https://xxxx.up.railway.app` (بدون اسلش آخر) |
+| `DB_PATH` | `/app/data/bot.db` (حتماً همین) |
 
-بررسی سلامت: `GET /health` → `ok`
+4. **Volume بساز (مهم):**
+   - از منوی سرویس → **Settings** یا **Volumes** → **Add Volume**
+   - **Mount Path** را دقیقاً بگذار: `/app/data`
+   - حجم دلخواه (مثلاً 1GB کافی است)
+5. Deploy بزن (یا Redeploy بعد از اضافه کردن Volume).
 
----
+### چک کردن
+
+- لاگ استارتاپ باید چیزی شبیه `DB_PATH=/app/data/bot.db` نشان دهد.
+- `GET /health` → `ok`
+- بعد از یک ری‌استارت دستی، لیست اشتراک‌ها باید سر جایش باشد.
+
+### نکته
+
+- `Dockerfile` پوشه `/app/data` و `ENV DB_PATH=/app/data/bot.db` را از قبل دارد.
+- فقط وقتی Volume روی `/app/data` مانت شده باشد داده ماندگار است.
+- برای جابه‌جایی سرور از بک‌آپ داخل ربات/پنل استفاده کن.
+
+ربات همزمان polling تلگرام و سرور HTTP (`/sub/{token}`، `/panel`، `/health`) را اجرا می‌کند.
+
 
 ## اجرای محلی (اختیاری)
 

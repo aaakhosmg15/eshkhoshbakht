@@ -46,6 +46,9 @@ from pinger import ping_configs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# مسیر پایدار دیتابیس (باید روی Volume باشد)
+logger.info("DB_PATH=%s", storage.DB_PATH)
+
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_IDS = {int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()}
 PAGE_SIZE = 8

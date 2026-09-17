@@ -1,0 +1,10 @@
+# راهنما: Volume را از داشبورد Railway بساز و Mount Path را بگذار روی /app/data
+# متغیر DB_PATH=/app/data/bot.db در Variables ست شود (Dockerfile هم همین پیش‌فرض را دارد).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
