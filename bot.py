@@ -332,6 +332,7 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 مدیریت کانفیگ‌ها", callback_data=f"gen_cfgs:{gen_id}:0")],
+            [InlineKeyboardButton(text="📶 پینگ کانفیگ‌ها", callback_data=f"gen_ping:{gen_id}")],
             [InlineKeyboardButton(text="📱 نمایش QR Code", callback_data=f"gen_qr:{gen_id}")],
             [InlineKeyboardButton(text="➕ افزودن کانفیگ از یک اشتراک دیگه", callback_data=f"gen_add:{gen_id}")],
             [
@@ -2327,10 +2328,67 @@ async def ping_sub(callback: CallbackQuery):
         return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
     await callback.answer()
     status = await callback.message.answer(f"در حال پینگ {len(sub['configs'])} کانفیگ...")
-    results = await ping_configs(sub["configs"])
+    old_configs = list(sub["configs"])
+    results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
         storage.set_sub_last_successful_ping(sub_id, callback.from_user.id)
-    chunks = _format_ping_lines(sub["name"], sub["configs"], results)
+    # مرتب‌سازی دائمی: کمترین پینگ بالا، تایم‌اوت پایین
+    sorted_configs = storage.sort_sub_configs_by_ping(sub_id, callback.from_user.id, results) or old_configs
+    # results را با ترتیب جدید هم‌تراز کن
+    old_to_ms = {i: results.get(i) for i in range(len(old_configs))}
+    # بعد از sort، ایندکس‌های جدید با کانفیگ‌های sorted مطابقت دارند؛ برای نمایش، از ترتیب sorted استفاده می‌کنیم
+    new_results = {}
+    for new_i, cfg in enumerate(sorted_configs):
+        # پیدا کردن اولین ایندکس قدیمی این کانفیگ
+        try:
+            old_i = old_configs.index(cfg)
+            # اگر تکراری بود index فقط اولی را می‌دهد؛ برای دقت از fingerprint بهتر است ولی کافی است
+            new_results[new_i] = old_to_ms.get(old_i)
+            # مصرف‌شده را خنثی کن تا تکراری‌ها درست بمانند
+            old_configs[old_i] = None  # type: ignore
+        except ValueError:
+            new_results[new_i] = None
+    chunks = _format_ping_lines(sub["name"], sorted_configs, new_results)
+    note = "\n\n↕️ لیست کانفیگ‌ها بر اساس پینگ مرتب شد (سریع‌ترها بالا)."
+    chunks[0] = chunks[0].rstrip() + note
+    await status.edit_text(chunks[0], parse_mode="HTML")
+    for chunk in chunks[1:]:
+        await callback.message.answer(chunk, parse_mode="HTML")
+
+
+
+
+@dp.callback_query(F.data.regexp(r"^gen_ping:\d+$"))
+async def ping_generated(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[1])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
+    await callback.answer()
+    try:
+        await refresh_source_subs_for_gen(g)
+    except Exception:
+        pass
+    configs = storage.resolve_generated_configs(g, persist=True)
+    status = await callback.message.answer(f"در حال پینگ {len(configs)} کانفیگ...")
+    old_configs = list(configs)
+    results = await ping_configs(old_configs)
+    if any(ms is not None for ms in results.values()):
+        storage.set_generated_last_successful_ping(gen_id, callback.from_user.id)
+    sorted_configs = storage.sort_generated_configs_by_ping(gen_id, callback.from_user.id, results) or old_configs
+    new_results = {}
+    leftovers = list(old_configs)
+    for new_i, cfg in enumerate(sorted_configs):
+        ms = None
+        for old_i, old_cfg in enumerate(leftovers):
+            if old_cfg is not None and old_cfg == cfg:
+                ms = results.get(old_i)
+                leftovers[old_i] = None
+                break
+        new_results[new_i] = ms
+    chunks = _format_ping_lines(g["name"], sorted_configs, new_results)
+    note = "\n\n↕️ لیست کانفیگ‌ها بر اساس پینگ مرتب شد (سریع‌ترها بالا)."
+    chunks[0] = chunks[0].rstrip() + note
     await status.edit_text(chunks[0], parse_mode="HTML")
     for chunk in chunks[1:]:
         await callback.message.answer(chunk, parse_mode="HTML")

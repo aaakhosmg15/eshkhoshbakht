@@ -618,12 +618,23 @@ async function pingSub(id) {
     const results = data.results || data;
     state.pingResults = {};
     results.forEach((r) => { state.pingResults[r.index] = r.ms; });
-    if (state.currentSub) {
+    // لیست کانفیگ‌ها بر اساس پینگ مرتب شده و ذخیره شده
+    if (data.sub) {
+      state.currentSub = data.sub;
+    } else if (state.currentSub) {
       state.currentSub.last_successful_ping = data.alive > 0 ? new Date().toISOString() : state.currentSub.last_successful_ping;
+      // ترتیب نمایش را با results هم‌تراز کن
+      if (Array.isArray(results) && state.currentSub.configs) {
+        state.currentSub.configs = results.map((r) => ({
+          index: r.index,
+          protocol: r.protocol,
+          remark: r.remark,
+        }));
+      }
     }
     render();
     showPingChart(results, data.alive, data.dead, data.total);
-    toast(`پینگ تمام شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
+    toast(`پینگ تمام شد و بر اساس سرعت مرتب شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -635,12 +646,14 @@ async function pingGenerated(id) {
     const results = data.results || data;
     state.pingResults = {};
     results.forEach((r) => { state.pingResults[r.index] = r.ms; });
-    if (state.currentGen && data.alive > 0) {
+    if (data.gen) {
+      state.currentGen = data.gen;
+    } else if (state.currentGen && data.alive > 0) {
       state.currentGen.last_successful_ping = new Date().toISOString();
     }
     render();
     showPingChart(results, data.alive, data.dead, data.total);
-    toast(`پینگ تمام شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
+    toast(`پینگ تمام شد و بر اساس سرعت مرتب شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -660,6 +673,7 @@ function showPingChart(results, alive, dead, total) {
   }).join("");
   openModal(`
     <h2>📶 نتیجه پینگ</h2>
+    <p class="muted" style="margin:0 0 8px;font-size:.85rem">لیست کانفیگ‌ها ذخیره شد: سریع‌ترها بالا، تایم‌اوت‌ها پایین.</p>
     <div class="ping-summary">
       <span class="ping-pill good">زنده ${alive ?? "—"}</span>
       <span class="ping-pill dead">مرده ${dead ?? "—"}</span>

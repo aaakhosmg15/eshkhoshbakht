@@ -214,18 +214,38 @@ async def api_ping_sub(request: web.Request) -> web.Response:
     if not sub:
         return _err("اشتراک پیدا نشد.", 404)
 
-    results = await ping_configs(sub["configs"])
+    old_configs = list(sub["configs"])
+    results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
         storage.set_sub_last_successful_ping(sub_id, request["user_id"])
+    # مرتب‌سازی دائمی بر اساس پینگ (کمترین بالا)
+    sorted_configs = storage.sort_sub_configs_by_ping(sub_id, request["user_id"], results) or old_configs
+    # نگاشت ms به ترتیب جدید
+    used = set()
     out = []
-    for i, raw in enumerate(sub["configs"]):
+    for new_i, raw in enumerate(sorted_configs):
+        ms = None
+        for old_i, old_raw in enumerate(old_configs):
+            if old_i in used:
+                continue
+            if old_raw == raw:
+                ms = results.get(old_i)
+                used.add(old_i)
+                break
         out.append(
-            {"index": i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": results.get(i)}
+            {"index": new_i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": ms}
         )
-    out.sort(key=lambda r: (r["ms"] is None, r["ms"] if r["ms"] is not None else 0))
     alive = sum(1 for r in out if r["ms"] is not None)
     dead = len(out) - alive
-    return web.json_response({"results": out, "alive": alive, "dead": dead, "total": len(out)})
+    sub = storage.get_sub(sub_id, request["user_id"])
+    return web.json_response({
+        "results": out,
+        "alive": alive,
+        "dead": dead,
+        "total": len(out),
+        "sorted": True,
+        "sub": _sub_detail(sub) if sub else None,
+    })
 
 
 async def api_delete_dead(request: web.Request) -> web.Response:
@@ -639,7 +659,7 @@ async def api_backup_restore(request: web.Request) -> web.Response:
 
 
 async def api_ping_generated(request: web.Request) -> web.Response:
-    """پینگ کانفیگ‌های یک اشتراک سفارشی (با resolve لایو)."""
+    """پینگ کانفیگ‌های یک اشتراک سفارشی (با resolve لایو) و مرتب‌سازی دائمی بر اساس پینگ."""
     gen_id = int(request.match_info["gen_id"])
     gen = storage.get_generated_by_id(gen_id, request["user_id"])
     if not gen:
@@ -649,18 +669,41 @@ async def api_ping_generated(request: web.Request) -> web.Response:
     except Exception:
         pass
     configs = storage.resolve_generated_configs(gen, persist=True)
-    results = await ping_configs(configs)
+    old_configs = list(configs)
+    results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
         storage.set_generated_last_successful_ping(gen_id, request["user_id"])
+    sorted_configs = storage.sort_generated_configs_by_ping(gen_id, request["user_id"], results) or old_configs
+    used = set()
     out = []
-    for i, raw in enumerate(configs):
+    for new_i, raw in enumerate(sorted_configs):
+        ms = None
+        for old_i, old_raw in enumerate(old_configs):
+            if old_i in used:
+                continue
+            if old_raw == raw:
+                ms = results.get(old_i)
+                used.add(old_i)
+                break
         out.append(
-            {"index": i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": results.get(i)}
+            {"index": new_i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": ms}
         )
-    out.sort(key=lambda r: (r["ms"] is None, r["ms"] if r["ms"] is not None else 0))
     alive = sum(1 for r in out if r["ms"] is not None)
     dead = len(out) - alive
-    return web.json_response({"results": out, "alive": alive, "dead": dead, "total": len(out)})
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    live = sorted_configs
+    data = _gen_summary(gen, request) if gen else {}
+    if gen:
+        data["config_count"] = len(live)
+        data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    return web.json_response({
+        "results": out,
+        "alive": alive,
+        "dead": dead,
+        "total": len(out),
+        "sorted": True,
+        "gen": data,
+    })
 
 
 def add_routes(app: web.Application) -> None:

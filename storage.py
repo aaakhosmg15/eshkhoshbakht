@@ -498,6 +498,61 @@ def reorder_config_in_generated(gen_id: int, user_id: int, idx: int, direction: 
     return True
 
 
+
+def sort_configs_by_ping(configs: list[str], results: dict[int, float | None]) -> list[str]:
+    """مرتب‌سازی کانفیگ‌ها: کمترین پینگ اول، تایم‌اوت‌ها آخر."""
+    indexed = list(enumerate(configs))
+    indexed.sort(key=lambda t: (results.get(t[0]) is None, results.get(t[0]) if results.get(t[0]) is not None else 0))
+    return [cfg for _, cfg in indexed]
+
+
+def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
+    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک اصلی بر اساس پینگ. لیست جدید یا None."""
+    sub = get_sub(sub_id, user_id)
+    if not sub:
+        return None
+    new_configs = sort_configs_by_ping(sub["configs"], results)
+    update_configs(sub_id, user_id, new_configs)
+    return new_configs
+
+
+def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
+    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک سفارشی (+ items) بر اساس پینگ."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT configs, items FROM generated_subs WHERE id=? AND user_id=?",
+        (gen_id, user_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    configs = json.loads(row[0])
+    items = None
+    if row[1]:
+        try:
+            items = json.loads(row[1])
+        except Exception:
+            items = None
+    order = list(range(len(configs)))
+    order.sort(key=lambda i: (results.get(i) is None, results.get(i) if results.get(i) is not None else 0))
+    new_configs = [configs[i] for i in order]
+    new_items = None
+    if isinstance(items, list) and len(items) == len(configs):
+        new_items = [items[i] for i in order]
+    conn.execute(
+        "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
+        (
+            json.dumps(new_configs),
+            json.dumps(new_items) if new_items is not None else (row[1] if not isinstance(items, list) else None),
+            gen_id,
+            user_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return new_configs
+
+
 def cleanup_old_expired_generated(grace_days: int = 7) -> int:
     """
     اشتراک‌های سفارشی که بیش از grace_days از تاریخ انقضایشان گذشته را
