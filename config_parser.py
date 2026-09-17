@@ -88,8 +88,151 @@ def get_host_port(raw: str) -> tuple[str, int] | None:
     return None
 
 
+
+# ---------- پرچم کشور از روی اسم ----------
+
+# نام‌های رایج (فارسی + انگلیسی) → پرچم
+# کلیدها lowercase؛ تطبیق با کلمه کامل در اسم
+_COUNTRY_FLAGS: list[tuple[tuple[str, ...], str]] = [
+    # طولانی‌ترها اول تا «united states» قبل از «us» نیاید به‌اشتباه — با word boundary کار می‌کنیم
+    (("united arab emirates", "امارات", "dubai", "دبی", "uae"), "🇦🇪"),
+    (("united states", "آمریکا", "امریکا", "usa", "america", "us"), "🇺🇸"),
+    (("united kingdom", "انگلستان", "بریتانیا", "england", "britain", "uk"), "🇬🇧"),
+    (("saudi arabia", "عربستان", "سعودی"), "🇸🇦"),
+    (("south korea", "کره جنوبی", "کره"), "🇰🇷"),
+    (("north korea", "کره شمالی"), "🇰🇵"),
+    (("hong kong", "هنگ کنگ", "هنگ‌کنگ"), "🇭🇰"),
+    (("new zealand", "نیوزیلند", "نیوزلند"), "🇳🇿"),
+    (("south africa", "آفریقای جنوبی"), "🇿🇦"),
+    (("czech", "چک", "czechia"), "🇨🇿"),
+    (("iran", "ایران", "ir"), "🇮🇷"),
+    (("germany", "آلمان", "deutschland", "de"), "🇩🇪"),
+    (("france", "فرانسه", "fr"), "🇫🇷"),
+    (("netherlands", "هلند", "holland", "nl"), "🇳🇱"),
+    (("turkey", "turkiye", "türkiye", "ترکیه", "tr"), "🇹🇷"),
+    (("canada", "کانادا", "ca"), "🇨🇦"),
+    (("japan", "ژاپن", "jp"), "🇯🇵"),
+    (("china", "چین", "cn"), "🇨🇳"),
+    (("russia", "روسیه", "ru"), "🇷🇺"),
+    (("india", "هند", "in"), "🇮🇳"),
+    (("singapore", "سنگاپور", "sg"), "🇸🇬"),
+    (("sweden", "سوئد", "se"), "🇸🇪"),
+    (("switzerland", "سوئیس", "ch"), "🇨🇭"),
+    (("austria", "اتریش", "at"), "🇦🇹"),
+    (("italy", "ایتالیا", "it"), "🇮🇹"),
+    (("spain", "اسپانیا", "es"), "🇪🇸"),
+    (("poland", "لهستان", "pl"), "🇵🇱"),
+    (("finland", "فنلاند", "fi"), "🇫🇮"),
+    (("norway", "نروژ", "no"), "🇳🇴"),
+    (("denmark", "دانمارک", "dk"), "🇩🇰"),
+    (("belgium", "بلژیک", "be"), "🇧🇪"),
+    (("portugal", "پرتغال", "pt"), "🇵🇹"),
+    (("greece", "یونان", "gr"), "🇬🇷"),
+    (("ireland", "ایرلند", "ie"), "🇮🇪"),
+    (("australia", "استرالیا", "au"), "🇦🇺"),
+    (("brazil", "برزیل", "br"), "🇧🇷"),
+    (("mexico", "مکزیک", "mx"), "🇲🇽"),
+    (("argentina", "آرژانتین", "ar"), "🇦🇷"),
+    (("ukraine", "اوکراین", "ua"), "🇺🇦"),
+    (("romania", "رومانی", "ro"), "🇷🇴"),
+    (("bulgaria", "بلغارستان", "bg"), "🇧🇬"),
+    (("hungary", "مجارستان", "hu"), "🇭🇺"),
+    (("serbia", "صربستان", "rs"), "🇷🇸"),
+    (("croatia", "کرواسی", "hr"), "🇭🇷"),
+    (("slovakia", "اسلواکی", "sk"), "🇸🇰"),
+    (("slovenia", "اسلوونی", "si"), "🇸🇮"),
+    (("lithuania", "لیتوانی", "lt"), "🇱🇹"),
+    (("latvia", "لتونی", "lv"), "🇱🇻"),
+    (("estonia", "استونی", "ee"), "🇪🇪"),
+    (("iceland", "ایسلند", "is"), "🇮🇸"),
+    (("luxembourg", "لوکزامبورگ", "lu"), "🇱🇺"),
+    (("malaysia", "مالزی", "my"), "🇲🇾"),
+    (("thailand", "تایلند", "th"), "🇹🇭"),
+    (("vietnam", "ویتنام", "vn"), "🇻🇳"),
+    (("indonesia", "اندونزی", "id"), "🇮🇩"),
+    (("philippines", "فیلیپین", "ph"), "🇵🇭"),
+    (("taiwan", "تایوان", "tw"), "🇹🇼"),
+    (("israel", "اسرائیل", "il"), "🇮🇱"),
+    (("iraq", "عراق", "iq"), "🇮🇶"),
+    (("qatar", "قطر", "qa"), "🇶🇦"),
+    (("kuwait", "کویت", "kw"), "🇰🇼"),
+    (("bahrain", "بحرین", "bh"), "🇧🇭"),
+    (("oman", "عمان", "om"), "🇴🇲"),
+    (("egypt", "مصر", "eg"), "🇪🇬"),
+    (("pakistan", "پاکستان", "pk"), "🇵🇰"),
+    (("afghanistan", "افغانستان", "af"), "🇦🇫"),
+    (("azerbaijan", "آذربایجان", "az"), "🇦🇿"),
+    (("armenia", "ارمنستان", "am"), "🇦🇲"),
+    (("georgia", "گرجستان", "ge"), "🇬🇪"),
+    (("kazakhstan", "قزاقستان", "kz"), "🇰🇿"),
+    (("uzbekistan", "ازبکستان", "uz"), "🇺🇿"),
+    (("cyprus", "قبرس", "cy"), "🇨🇾"),
+    (("moldova", "مولداوی", "md"), "🇲🇩"),
+    (("belarus", "بلاروس", "by"), "🇧🇾"),
+    (("chile", "شیلی", "cl"), "🇨🇱"),
+    (("colombia", "کلمبیا", "co"), "🇨🇴"),
+    (("peru", "پرو", "pe"), "🇵🇪"),
+    (("nigeria", "نیجریه", "ng"), "🇳🇬"),
+    (("kenya", "کنیا", "ke"), "🇰🇪"),
+    (("morocco", "مراکش", "ma"), "🇲🇦"),
+]
+
+
+def _strip_leading_flags(text: str) -> str:
+    """پرچم‌های ابتدای رشته را برمی‌دارد (برای جلوگیری از تکرار)."""
+    out = text.strip()
+    # پرچم‌ها معمولاً دو codepoint منطقه‌ای هستند
+    while out:
+        # اگر با regional indicator pair شروع شود
+        if len(out) >= 2 and "\U0001F1E6" <= out[0] <= "\U0001F1FF" and "\U0001F1E6" <= out[1] <= "\U0001F1FF":
+            out = out[2:].lstrip(" \t-|–—:")
+            continue
+        break
+    return out
+
+
+def apply_country_flag(name: str) -> str:
+    """
+    اگر در اسم کانفیگ نام کشور باشد و پرچم نباشد، پرچم را اول اسم می‌گذارد.
+    اگر از قبل پرچم باشد، عوض نمی‌کند مگر اینکه کشور دیگری در متن باشد.
+    """
+    if not name or not name.strip():
+        return name
+    original = name.strip()
+    body = _strip_leading_flags(original)
+    lower = body.casefold()
+    # نرمال‌سازی ی فارسی
+    lower = lower.replace("ي", "ی").replace("ك", "ک")
+
+    matched_flag = None
+    matched_len = 0
+    for names, flag in _COUNTRY_FLAGS:
+        for n in names:
+            key = n.casefold().replace("ي", "ی").replace("ك", "ک")
+            # کدهای دو حرفی فقط به‌صورت کلمهٔ جدا
+            if len(key) <= 2:
+                pattern = r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])"
+            else:
+                # فارسی/لاتین: زیررشته با مرز نرم
+                pattern = r"(?<![a-zA-Z0-9\u0600-\u06FF])" + re.escape(key) + r"(?![a-zA-Z0-9\u0600-\u06FF])"
+            if re.search(pattern, lower, flags=re.IGNORECASE):
+                if len(key) > matched_len:
+                    matched_flag = flag
+                    matched_len = len(key)
+
+    if not matched_flag:
+        return original
+
+    # اگر همین پرچم از قبل اول اسم بود
+    if original.startswith(matched_flag):
+        return original
+
+    return f"{matched_flag} {body}"
+
+
 def rename_config(raw: str, new_name: str) -> str:
-    """یک کانفیگ خام رو با اسم جدید برمی‌گردونه."""
+    """یک کانفیگ خام رو با اسم جدید برمی‌گردونه (پرچم کشور خودکار اگر نام کشور باشد)."""
+    new_name = apply_country_flag((new_name or "").strip())
     if raw.startswith("vmess://"):
         try:
             data = json.loads(_b64decode(raw[len("vmess://"):]))
