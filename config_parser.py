@@ -231,6 +231,36 @@ def apply_country_flag(name: str) -> str:
     return f"{matched_flag} {body}"
 
 
+
+STRONGEST_LABEL = " (سریع ترین)"
+
+
+def strip_strongest_label(name: str) -> str:
+    """برچسب «سریع ترین» را از انتهای اسم برمی‌دارد (اگر باشد)."""
+    text = (name or "").strip()
+    for suffix in (
+        STRONGEST_LABEL,
+        "(سریع ترین)",
+        "سریع ترین",
+        "(قوی ترین)",
+        "قوی ترین",
+        " (قوی ترین)",
+    ):
+        suf = suffix.strip()
+        if text.endswith(suf):
+            text = text[: -len(suf)].rstrip(" -_|")
+        text = text.replace(suffix, "")
+        text = " ".join(text.split())
+    return text.strip()
+
+
+def with_strongest_label(name: str) -> str:
+    base = strip_strongest_label(name) or name or ""
+    if not base:
+        base = "بدون نام"
+    return base + STRONGEST_LABEL
+
+
 def rename_config(raw: str, new_name: str) -> str:
     """یک کانفیگ خام رو با اسم جدید برمی‌گردونه (پرچم کشور خودکار اگر نام کشور باشد)."""
     new_name = apply_country_flag((new_name or "").strip())

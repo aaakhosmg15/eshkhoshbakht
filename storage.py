@@ -515,14 +515,55 @@ def reorder_config_in_generated(gen_id: int, user_id: int, idx: int, direction: 
 
 
 def sort_configs_by_ping(configs: list[str], results: dict[int, float | None]) -> list[str]:
-    """مرتب‌سازی کانفیگ‌ها: کمترین پینگ اول، تایم‌اوت‌ها آخر."""
+    """مرتب‌سازی کانفیگ‌ها: کمترین پینگ اول، تایم‌اوت‌ها آخر + برچسب سریع‌ترین."""
+    from config_parser import (
+        get_remark,
+        rename_config,
+        strip_strongest_label,
+        with_strongest_label,
+    )
+
     indexed = list(enumerate(configs))
-    indexed.sort(key=lambda t: (results.get(t[0]) is None, results.get(t[0]) if results.get(t[0]) is not None else 0))
-    return [cfg for _, cfg in indexed]
+    indexed.sort(
+        key=lambda t: (
+            results.get(t[0]) is None,
+            results.get(t[0]) if results.get(t[0]) is not None else 0,
+        )
+    )
+    ordered = [cfg for _, cfg in indexed]
+    ordered_ms = [results.get(old_i) for old_i, _ in indexed]
+
+    # اول برچسب قبلی «سریع ترین» را از همه بردار
+    cleaned = []
+    for raw in ordered:
+        remark = get_remark(raw) or ""
+        base = strip_strongest_label(remark)
+        if base != remark:
+            cleaned.append(rename_config(raw, base) if base else raw)
+        else:
+            cleaned.append(raw)
+
+    # بهترین پینگ (کمترین ms غیر None)
+    best_i = None
+    best_ms = None
+    for i, ms in enumerate(ordered_ms):
+        if ms is None:
+            continue
+        if best_ms is None or ms < best_ms:
+            best_ms = ms
+            best_i = i
+
+    if best_i is not None:
+        raw = cleaned[best_i]
+        remark = get_remark(raw) or "بدون نام"
+        labeled = with_strongest_label(remark)
+        cleaned[best_i] = rename_config(raw, labeled)
+
+    return cleaned
 
 
 def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
-    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک اصلی بر اساس پینگ. لیست جدید یا None."""
+    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک اصلی بر اساس پینگ (+ برچسب سریع‌ترین)."""
     sub = get_sub(sub_id, user_id)
     if not sub:
         return None
@@ -532,7 +573,9 @@ def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float
 
 
 def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
-    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک سفارشی (+ items) بر اساس پینگ."""
+    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک سفارشی (+ items) بر اساس پینگ و برچسب سریع‌ترین."""
+    from config_parser import get_remark, strip_strongest_label, with_strongest_label
+
     conn = _conn()
     row = conn.execute(
         "SELECT configs, items FROM generated_subs WHERE id=? AND user_id=?",
@@ -549,16 +592,38 @@ def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int,
         except Exception:
             items = None
     order = list(range(len(configs)))
-    order.sort(key=lambda i: (results.get(i) is None, results.get(i) if results.get(i) is not None else 0))
-    new_configs = [configs[i] for i in order]
+    order.sort(
+        key=lambda i: (
+            results.get(i) is None,
+            results.get(i) if results.get(i) is not None else 0,
+        )
+    )
+    # نتایج را به ترتیب جدید نگه می‌داریم تا sort_configs_by_ping درست برچسب بزند
+    # configs در ترتیب قدیمی است؛ results با ایندکس قدیمی
+    new_configs = sort_configs_by_ping(configs, results)
+
     new_items = None
     if isinstance(items, list) and len(items) == len(configs):
         new_items = [items[i] for i in order]
+        # هم‌تراز کردن name در items با remark نهایی (برای لایو)
+        for i, it in enumerate(new_items):
+            if not isinstance(it, dict):
+                continue
+            it = dict(it)
+            remark = get_remark(new_configs[i]) if i < len(new_configs) else ""
+            if remark:
+                it["name"] = remark
+            else:
+                # پاک کردن برچسب قدیمی از name ذخیره‌شده
+                if it.get("name"):
+                    it["name"] = strip_strongest_label(str(it["name"]))
+            new_items[i] = it
+
     conn.execute(
         "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
         (
             json.dumps(new_configs),
-            json.dumps(new_items) if new_items is not None else (row[1] if not isinstance(items, list) else None),
+            json.dumps(new_items) if new_items is not None else None,
             gen_id,
             user_id,
         ),

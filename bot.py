@@ -2352,7 +2352,7 @@ async def ping_sub(callback: CallbackQuery):
         except ValueError:
             new_results[new_i] = None
     chunks = _format_ping_lines(sub["name"], sorted_configs, new_results)
-    note = "\n\n↕️ لیست کانفیگ‌ها بر اساس پینگ مرتب شد (سریع‌ترها بالا)."
+    note = "\n\n↕️ لیست بر اساس پینگ مرتب شد (سریع‌ترها بالا). بهترین: «سریع ترین»."
     chunks[0] = chunks[0].rstrip() + note
     await status.edit_text(chunks[0], parse_mode="HTML")
     for chunk in chunks[1:]:
@@ -2390,7 +2390,7 @@ async def ping_generated(callback: CallbackQuery):
                 break
         new_results[new_i] = ms
     chunks = _format_ping_lines(g["name"], sorted_configs, new_results)
-    note = "\n\n↕️ لیست کانفیگ‌ها بر اساس پینگ مرتب شد (سریع‌ترها بالا)."
+    note = "\n\n↕️ لیست بر اساس پینگ مرتب شد (سریع‌ترها بالا). بهترین: «سریع ترین»."
     chunks[0] = chunks[0].rstrip() + note
     await status.edit_text(chunks[0], parse_mode="HTML")
     for chunk in chunks[1:]:

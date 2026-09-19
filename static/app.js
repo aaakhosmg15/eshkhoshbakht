@@ -634,7 +634,7 @@ async function pingSub(id) {
     }
     render();
     showPingChart(results, data.alive, data.dead, data.total);
-    toast(`پینگ تمام شد و بر اساس سرعت مرتب شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
+    toast(`پینگ تمام شد — مرتب‌سازی + برچسب سریع‌ترین — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -653,7 +653,7 @@ async function pingGenerated(id) {
     }
     render();
     showPingChart(results, data.alive, data.dead, data.total);
-    toast(`پینگ تمام شد و بر اساس سرعت مرتب شد — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
+    toast(`پینگ تمام شد — مرتب‌سازی + برچسب سریع‌ترین — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -673,7 +673,7 @@ function showPingChart(results, alive, dead, total) {
   }).join("");
   openModal(`
     <h2>📶 نتیجه پینگ</h2>
-    <p class="muted" style="margin:0 0 8px;font-size:.85rem">لیست کانفیگ‌ها ذخیره شد: سریع‌ترها بالا، تایم‌اوت‌ها پایین.</p>
+    <p class="muted" style="margin:0 0 8px;font-size:.85rem">ترتیب ذخیره شد: سریع‌ترها بالا. بهترین پینگ برچسب «سریع ترین» گرفت.</p>
     <div class="ping-summary">
       <span class="ping-pill good">زنده ${alive ?? "—"}</span>
       <span class="ping-pill dead">مرده ${dead ?? "—"}</span>
