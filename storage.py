@@ -514,6 +514,95 @@ def reorder_config_in_generated(gen_id: int, user_id: int, idx: int, direction: 
 
 
 
+
+def _ensure_generated_items(configs: list[str], items) -> list[dict]:
+    """اگر items نباشد یا طولش نخواند، از روی configs می‌سازد (برای پین روی snapshot)."""
+    from config_parser import config_fingerprint, get_remark
+
+    if isinstance(items, list) and len(items) == len(configs):
+        out = []
+        for it in items:
+            out.append(dict(it) if isinstance(it, dict) else {})
+        return out
+    result = []
+    for i, raw in enumerate(configs):
+        result.append(
+            {
+                "sub_id": -1,
+                "index": i,
+                "fp": config_fingerprint(raw),
+                "name": get_remark(raw) or "",
+                "pinned": False,
+            }
+        )
+    return result
+
+
+def _pinned_first(configs: list[str], items: list[dict]) -> tuple[list[str], list[dict]]:
+    """کانفیگ‌های پین‌شده را به ابتدای لیست می‌آورد (ترتیب نسبی حفظ می‌شود)."""
+    if len(configs) != len(items):
+        return configs, items
+    pinned_c, pinned_i = [], []
+    rest_c, rest_i = [], []
+    for c, it in zip(configs, items):
+        if isinstance(it, dict) and it.get("pinned"):
+            pinned_c.append(c)
+            pinned_i.append(it)
+        else:
+            rest_c.append(c)
+            rest_i.append(it if isinstance(it, dict) else {})
+    return pinned_c + rest_c, pinned_i + rest_i
+
+
+def set_generated_config_pinned(
+    gen_id: int, user_id: int, idx: int, pinned: bool | None = None
+) -> dict | None:
+    """
+    پین/آن‌پین یک کانفیگ در اشتراک سفارشی.
+    pinned=None یعنی toggle.
+    بعد از پین، همهٔ پین‌شده‌ها بالای لیست می‌آیند.
+    """
+    conn = _conn()
+    row = conn.execute(
+        "SELECT configs, items FROM generated_subs WHERE id=? AND user_id=?",
+        (gen_id, user_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    configs = json.loads(row[0])
+    if idx < 0 or idx >= len(configs):
+        conn.close()
+        return None
+    items_raw = None
+    if row[1]:
+        try:
+            items_raw = json.loads(row[1])
+        except Exception:
+            items_raw = None
+    items = _ensure_generated_items(configs, items_raw)
+    current = bool(items[idx].get("pinned"))
+    new_val = (not current) if pinned is None else bool(pinned)
+    items[idx]["pinned"] = new_val
+    configs, items = _pinned_first(configs, items)
+    conn.execute(
+        "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
+        (json.dumps(configs), json.dumps(items), gen_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"pinned": new_val, "config_count": len(configs)}
+
+
+def get_generated_config_pinned_flags(gen: dict) -> list[bool]:
+    """لیست بولین پین هم‌تراز با configs فعلی gen."""
+    configs = gen.get("configs") or []
+    items = gen.get("items")
+    if not isinstance(items, list) or len(items) != len(configs):
+        return [False] * len(configs)
+    return [bool(it.get("pinned")) if isinstance(it, dict) else False for it in items]
+
+
 def sort_configs_by_ping(configs: list[str], results: dict[int, float | None]) -> list[str]:
     """مرتب‌سازی کانفیگ‌ها: کمترین پینگ اول، تایم‌اوت‌ها آخر + برچسب سریع‌ترین."""
     from config_parser import (
@@ -614,10 +703,15 @@ def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int,
             if remark:
                 it["name"] = remark
             else:
-                # پاک کردن برچسب قدیمی از name ذخیره‌شده
                 if it.get("name"):
                     it["name"] = strip_strongest_label(str(it["name"]))
             new_items[i] = it
+    else:
+        new_items = _ensure_generated_items(new_configs, None)
+
+    # پین‌شده‌ها همیشه بالای لیست بمانند
+    if isinstance(new_items, list) and len(new_items) == len(new_configs):
+        new_configs, new_items = _pinned_first(new_configs, new_items)
 
     conn.execute(
         "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
@@ -787,6 +881,11 @@ def resolve_generated_configs(gen: dict, persist: bool = True) -> list[str]:
         elif i < len(snapshot):
             # منبع در دسترس نیست — آخرین نسخه ذخیره‌شده
             resolved.append(snapshot[i])
+
+    # ترتیب پین را حفظ کن (پین‌شده‌ها بالا)
+    if isinstance(new_items, list) and len(new_items) == len(resolved):
+        resolved, new_items = _pinned_first(resolved, new_items)
+        items_updated = True
 
     if persist and resolved and gen.get("id") is not None:
         conn = _conn()

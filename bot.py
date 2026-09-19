@@ -1739,7 +1739,7 @@ async def gen_list_configs(callback: CallbackQuery):
         return await callback.answer("کانفیگی نیست.", show_alert=True)
     await callback.message.edit_text(
         f"📋 کانفیگ‌های «{escape(g['name'])}» — یکی را انتخاب کن:",
-        reply_markup=build_gen_configs_keyboard(gen_id, configs, page),
+        reply_markup=build_gen_configs_keyboard(gen_id, configs, page, storage.get_generated_config_pinned_flags(g)),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -1758,10 +1758,14 @@ async def gen_cfg_pick(callback: CallbackQuery):
     raw = configs[idx]
     remark = get_remark(raw) or "(بدون نام)"
     proto = get_protocol(raw)
+    flags = storage.get_generated_config_pinned_flags(g)
+    is_pinned = bool(flags[idx]) if idx < len(flags) else False
+    pin_line = "📌 پین شده\n" if is_pinned else ""
     await callback.message.edit_text(
-        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n\n"
-        f"اشتراک: {escape(g['name'])}",
-        reply_markup=build_gen_cfg_action_keyboard(gen_id, idx),
+        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n"
+        f"{pin_line}"
+        f"\nاشتراک: {escape(g['name'])}",
+        reply_markup=build_gen_cfg_action_keyboard(gen_id, idx, is_pinned),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -2096,6 +2100,67 @@ async def gen_cfg_move_down(callback: CallbackQuery):
         parse_mode="HTML",
     )
     await callback.answer("پایین رفت")
+
+
+@dp.callback_query(F.data.regexp(r"^gen_cfg_pin:\d+:\d+$"))
+async def gen_cfg_pin_toggle(callback: CallbackQuery):
+    _, gen_id, idx = callback.data.split(":")
+    gen_id, idx = int(gen_id), int(idx)
+    result = storage.set_generated_config_pinned(gen_id, callback.from_user.id, idx, None)
+    if result is None:
+        return await callback.answer("عملیات ناموفق.", show_alert=True)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    configs = storage.resolve_generated_configs(g, persist=True) if g else []
+    flags = storage.get_generated_config_pinned_flags(g) if g else []
+    # بعد از پین، آیتم به بالا می‌رود — ایندکس جدید را پیدا کن
+    new_idx = 0
+    if result["pinned"]:
+        # اولین‌های پین‌شده؛ نزدیک‌ترین match با remark
+        for i, f in enumerate(flags):
+            if f:
+                new_idx = i
+                # اگر چند پین باشد، سعی کن remark قبلی را نگه نداریم — کاربر از لیست می‌آید
+                break
+        # بهتر: همه پین‌ها بالا؛ کانفیگ همین الان پین‌شده اول یا بین پین‌ها
+        # از آنجایی که toggle روی idx قبلی بود و reorder pinned_first است،
+        # اگر pinned=True ایندکس بین 0..n_pinned-1 است. آخرین پین‌شده معمولاً آخر لیست پین‌هاست
+        n_pin = sum(1 for f in flags if f)
+        if result["pinned"] and n_pin > 0:
+            new_idx = n_pin - 1
+        elif not result["pinned"]:
+            # آن‌پین: بین غیرپین‌ها؛ سخت است — برگرد به لیست
+            await callback.answer("پین برداشته شد")
+            await callback.message.edit_text(
+                f"📋 کانفیگ‌های «{escape(g['name'])}» — یکی را انتخاب کن:",
+                reply_markup=build_gen_configs_keyboard(
+                    gen_id, configs, 0, flags
+                ),
+                parse_mode="HTML",
+            )
+            return
+    else:
+        await callback.answer("پین برداشته شد")
+        await callback.message.edit_text(
+            f"📋 کانفیگ‌های «{escape(g['name'])}» — یکی را انتخاب کن:",
+            reply_markup=build_gen_configs_keyboard(gen_id, configs, 0, flags),
+            parse_mode="HTML",
+        )
+        return
+
+    raw = configs[new_idx] if new_idx < len(configs) else ""
+    remark = get_remark(raw) or "(بدون نام)"
+    proto = get_protocol(raw)
+    is_pinned = bool(flags[new_idx]) if new_idx < len(flags) else False
+    await callback.message.edit_text(
+        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n"
+        f"📌 پین شده — بالای لیست کلاینت قرار گرفت\n"
+        f"\nاشتراک: {escape(g['name'] if g else '')}",
+        reply_markup=build_gen_cfg_action_keyboard(gen_id, new_idx, is_pinned),
+        parse_mode="HTML",
+    )
+    await callback.answer("پین شد" if result["pinned"] else "پین برداشته شد")
+
+
 
 
 

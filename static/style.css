@@ -1657,3 +1657,8 @@ html.tg-miniapp.modal-open {
   .ping-row { grid-template-columns: 1fr 56px; }
   .ping-label { grid-column: 1 / -1; }
 }
+
+.config-row.config-pinned {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.06);
+}

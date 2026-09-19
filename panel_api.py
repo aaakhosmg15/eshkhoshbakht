@@ -45,8 +45,23 @@ async def _fetch_configs(sub_url: str) -> tuple[bool, list[str] | str]:
     return True, configs
 
 
-def _config_summary(idx: int, raw: str) -> dict:
-    return {"index": idx, "protocol": get_protocol(raw), "remark": get_remark(raw) or ""}
+def _config_summary(idx: int, raw: str, pinned: bool = False) -> dict:
+    return {
+        "index": idx,
+        "protocol": get_protocol(raw),
+        "remark": get_remark(raw) or "",
+        "pinned": bool(pinned),
+    }
+
+
+def _gen_configs_payload(gen: dict, live: list[str]) -> list[dict]:
+    flags = storage.get_generated_config_pinned_flags({**gen, "configs": live})
+    # اگر طول flags با live نخواند (بعد از resolve)، از items فعلی gen استفاده کن
+    if len(flags) != len(live):
+        flags = storage.get_generated_config_pinned_flags(gen)
+    if len(flags) != len(live):
+        flags = [False] * len(live)
+    return [_config_summary(i, c, flags[i] if i < len(flags) else False) for i, c in enumerate(live)]
 
 
 def _sub_summary(sub: dict) -> dict:
@@ -379,7 +394,7 @@ async def api_get_generated(request: web.Request) -> web.Response:
     live = storage.resolve_generated_configs(gen, persist=True)
     data = _gen_summary(gen, request)
     data["config_count"] = len(live)
-    data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    data["configs"] = _gen_configs_payload(gen, live)
     data["live"] = bool(gen.get("items"))
     return web.json_response(data)
 
@@ -469,7 +484,7 @@ async def api_rename_gen_config(request: web.Request) -> web.Response:
     live = storage.resolve_generated_configs(gen, persist=True)
     data = _gen_summary(gen, request)
     data["config_count"] = len(live)
-    data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    data["configs"] = _gen_configs_payload(gen, live)
     data["renamed"] = remark
     return web.json_response(data)
 
@@ -488,7 +503,7 @@ async def api_delete_gen_config(request: web.Request) -> web.Response:
     live = storage.resolve_generated_configs(gen, persist=True) if gen else []
     data = _gen_summary(gen, request) if gen else {"id": gen_id, "config_count": 0}
     data["config_count"] = len(live)
-    data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    data["configs"] = _gen_configs_payload(gen, live)
     data["deleted_index"] = idx
     return web.json_response(data)
 
@@ -608,7 +623,7 @@ async def api_reorder_gen_config(request: web.Request) -> web.Response:
         live = gen.get("configs") or []
     data = _gen_summary(gen, request)
     data["config_count"] = len(live)
-    data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+    data["configs"] = _gen_configs_payload(gen, live)
     return web.json_response(data)
 
 
@@ -695,7 +710,7 @@ async def api_ping_generated(request: web.Request) -> web.Response:
     data = _gen_summary(gen, request) if gen else {}
     if gen:
         data["config_count"] = len(live)
-        data["configs"] = [_config_summary(i, c) for i, c in enumerate(live)]
+        data["configs"] = _gen_configs_payload(gen, live)
     return web.json_response({
         "results": out,
         "alive": alive,
@@ -704,6 +719,32 @@ async def api_ping_generated(request: web.Request) -> web.Response:
         "sorted": True,
         "gen": data,
     })
+
+
+
+async def api_pin_gen_config(request: web.Request) -> web.Response:
+    """body اختیاری: { "pinned": true|false } — بدون body = toggle"""
+    gen_id = int(request.match_info["gen_id"])
+    idx = int(request.match_info["idx"])
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return _err("پیدا نشد.", 404)
+    body = await _json_body(request) or {}
+    pinned_arg = body.get("pinned")
+    if pinned_arg is not None:
+        pinned_arg = bool(pinned_arg)
+    else:
+        pinned_arg = None
+    result = storage.set_generated_config_pinned(gen_id, request["user_id"], idx, pinned_arg)
+    if result is None:
+        return _err("ایندکس نامعتبره.", 400)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    live = storage.resolve_generated_configs(gen, persist=True)
+    data = _gen_summary(gen, request)
+    data["config_count"] = len(live)
+    data["configs"] = _gen_configs_payload(gen, live)
+    data["pinned"] = result["pinned"]
+    return web.json_response(data)
 
 
 def add_routes(app: web.Application) -> None:
@@ -730,6 +771,7 @@ def add_routes(app: web.Application) -> None:
     app.router.add_post("/api/generated/{gen_id}/note", api_update_generated_note)
     app.router.add_post("/api/generated/{gen_id}/customer-message", api_update_generated_customer_message)
     app.router.add_post("/api/generated/{gen_id}/configs/{idx}/reorder", api_reorder_gen_config)
+    app.router.add_post("/api/generated/{gen_id}/configs/{idx}/pin", api_pin_gen_config)
     app.router.add_delete("/api/generated/{gen_id}", api_delete_generated)
     app.router.add_get("/api/backup", api_backup_export)
     app.router.add_post("/api/backup/restore", api_backup_restore)

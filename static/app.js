@@ -1000,12 +1000,16 @@ function renderGenDetail(gen) {
         msBadge = `<span class="badge ${tier}">${Math.round(ms)} ms</span>`;
       }
     }
+    const pinBadge = c.pinned ? '<span class="badge" title="پین شده">📌</span>' : "";
+    const pinTitle = c.pinned ? "برداشتن پین" : "پین کردن";
+    const pinIcon = c.pinned ? "📌" : "📍";
     return `
-    <div class="config-row">
+    <div class="config-row${c.pinned ? " config-pinned" : ""}">
       <span class="badge">${esc(c.protocol)}</span>
-      <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
+      <span class="remark">${pinBadge}${esc(c.remark || "(بدون نام)")}</span>
       ${msBadge}
       <div class="config-actions gooey">
+        <button class="btn-sm btn btn-icon" data-gen-pin="${c.index}" title="${pinTitle}">${pinIcon}</button>
         <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا">↑</button>
         <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین">↓</button>
         <button class="btn-sm btn btn-icon" data-gen-rename="${c.index}" title="تغییر اسم">${icon("edit", "icon-sm")}</button>
@@ -1040,6 +1044,9 @@ function renderGenDetail(gen) {
     });
     app.querySelectorAll("[data-gen-del]").forEach((btn) => {
       btn.addEventListener("click", () => confirmDeleteGenConfig(gen, parseInt(btn.dataset.genDel)));
+    });
+    app.querySelectorAll("[data-gen-pin]").forEach((btn) => {
+      btn.addEventListener("click", () => pinGenConfig(gen, parseInt(btn.dataset.genPin)));
     });
     app.querySelectorAll("[data-gen-up]").forEach((btn) => {
       btn.addEventListener("click", () => reorderGenConfig(gen, parseInt(btn.dataset.genUp), "up"));
@@ -1164,6 +1171,16 @@ function confirmDeleteGenConfig(gen, idx) {
 
 
 
+
+async function pinGenConfig(gen, idx) {
+  try {
+    const data = await api("POST", `/api/generated/${gen.id}/configs/${idx}/pin`, {});
+    state.currentGen = data;
+    state.pingResults = null;
+    render();
+    toast(data.pinned ? "پین شد — بالای لیست کلاینت" : "پین برداشته شد");
+  } catch (e) { toast(e.message, true); }
+}
 
 async function reorderGenConfig(gen, idx, direction) {
   try {
