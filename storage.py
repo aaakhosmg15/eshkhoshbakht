@@ -603,8 +603,58 @@ def get_generated_config_pinned_flags(gen: dict) -> list[bool]:
     return [bool(it.get("pinned")) if isinstance(it, dict) else False for it in items]
 
 
-def sort_configs_by_ping(configs: list[str], results: dict[int, float | None]) -> list[str]:
-    """مرتب‌سازی کانفیگ‌ها: کمترین پینگ اول، تایم‌اوت‌ها آخر + برچسب سریع‌ترین."""
+def _ping_ms(results: dict, idx: int) -> float | None:
+    """فقط ms عددی معتبر؛ تایم‌اوت و نامعتبر = None."""
+    if not isinstance(results, dict) or idx not in results:
+        return None
+    ms = results[idx]
+    if ms is None:
+        return None
+    try:
+        val = float(ms)
+    except (TypeError, ValueError):
+        return None
+    if val < 0 or val != val:  # NaN
+        return None
+    return val
+
+
+
+def map_ping_results_to_configs(
+    old_configs: list[str],
+    new_configs: list[str],
+    results: dict[int, float | None],
+) -> dict[int, float | None]:
+    """نتیجه پینگ را بعد از رنیم/مرتب‌سازی/پین به ایندکس جدید وصل می‌کند."""
+    from config_parser import get_host_port, get_remark, strip_strongest_label
+    from collections import defaultdict
+
+    def soft_key(raw: str):
+        hp = get_host_port(raw) or (None, None)
+        remark = strip_strongest_label(get_remark(raw) or "")
+        return (hp[0], hp[1], remark)
+
+    buckets: dict = defaultdict(list)
+    for i, raw in enumerate(old_configs):
+        buckets[soft_key(raw)].append(_ping_ms(results, i))
+
+    aligned: dict[int, float | None] = {}
+    for new_i, raw in enumerate(new_configs):
+        key = soft_key(raw)
+        if buckets[key]:
+            aligned[new_i] = buckets[key].pop(0)
+        else:
+            aligned[new_i] = None
+    return aligned
+
+
+def sort_configs_by_ping(
+    configs: list[str], results: dict[int, float | None]
+) -> tuple[list[str], dict[int, float | None]]:
+    """مرتب‌سازی بر اساس پینگ + برچسب سریع‌ترین فقط روی موفق با کمترین ms.
+
+    خروجی: (لیست کانفیگ مرتب، results با ایندکس جدید)
+    """
     from config_parser import (
         get_remark,
         rename_config,
@@ -612,43 +662,46 @@ def sort_configs_by_ping(configs: list[str], results: dict[int, float | None]) -
         with_strongest_label,
     )
 
-    indexed = list(enumerate(configs))
-    indexed.sort(
-        key=lambda t: (
-            results.get(t[0]) is None,
-            results.get(t[0]) if results.get(t[0]) is not None else 0,
-        )
-    )
-    ordered = [cfg for _, cfg in indexed]
-    ordered_ms = [results.get(old_i) for old_i, _ in indexed]
+    n = len(configs)
+    order = list(range(n))
 
-    # اول برچسب قبلی «سریع ترین» را از همه بردار
-    cleaned = []
-    for raw in ordered:
+    def sort_key(old_i: int):
+        ms = _ping_ms(results, old_i)
+        if ms is None:
+            return (1, 0.0)
+        return (0, ms)
+
+    order.sort(key=sort_key)
+
+    cleaned: list[str] = []
+    aligned: dict[int, float | None] = {}
+    for new_i, old_i in enumerate(order):
+        raw = configs[old_i]
         remark = get_remark(raw) or ""
         base = strip_strongest_label(remark)
-        if base != remark:
-            cleaned.append(rename_config(raw, base) if base else raw)
-        else:
-            cleaned.append(raw)
+        if base != (remark or "").strip():
+            raw = rename_config(raw, base if base else "بدون نام")
+        cleaned.append(raw)
+        aligned[new_i] = _ping_ms(results, old_i)
 
-    # بهترین پینگ (کمترین ms غیر None)
     best_i = None
     best_ms = None
-    for i, ms in enumerate(ordered_ms):
+    for new_i in range(len(cleaned)):
+        ms = aligned.get(new_i)
         if ms is None:
             continue
         if best_ms is None or ms < best_ms:
             best_ms = ms
-            best_i = i
+            best_i = new_i
 
     if best_i is not None:
         raw = cleaned[best_i]
-        remark = get_remark(raw) or "بدون نام"
-        labeled = with_strongest_label(remark)
-        cleaned[best_i] = rename_config(raw, labeled)
+        # دوباره مطمئن شو این ایندکس تایم‌اوت نیست
+        if aligned.get(best_i) is not None:
+            remark = strip_strongest_label(get_remark(raw) or "") or "بدون نام"
+            cleaned[best_i] = rename_config(raw, with_strongest_label(remark))
 
-    return cleaned
+    return cleaned, aligned
 
 
 def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
@@ -656,14 +709,20 @@ def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float
     sub = get_sub(sub_id, user_id)
     if not sub:
         return None
-    new_configs = sort_configs_by_ping(sub["configs"], results)
+    # طول results باید با configs یکی باشد
+    new_configs, _ = sort_configs_by_ping(list(sub["configs"]), results)
     update_configs(sub_id, user_id, new_configs)
     return new_configs
 
 
-def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
-    """مرتب‌سازی و ذخیره کانفیگ‌های اشتراک سفارشی (+ items) بر اساس پینگ و برچسب سریع‌ترین."""
-    from config_parser import get_remark, strip_strongest_label, with_strongest_label
+def sort_generated_configs_by_ping(
+    gen_id: int,
+    user_id: int,
+    results: dict[int, float | None],
+    configs_snapshot: list[str] | None = None,
+) -> list[str] | None:
+    """مرتب‌سازی اشتراک سفارشی با همان لیستی که پینگ شده (جلوگیری از جابه‌جایی ایندکس)."""
+    from config_parser import get_remark, strip_strongest_label
 
     conn = _conn()
     row = conn.execute(
@@ -673,43 +732,41 @@ def sort_generated_configs_by_ping(gen_id: int, user_id: int, results: dict[int,
     if not row:
         conn.close()
         return None
-    configs = json.loads(row[0])
+
+    db_configs = json.loads(row[0])
+    # حتماً همان ترتیبی که پینگ شده
+    configs = list(configs_snapshot) if configs_snapshot is not None else db_configs
+    if len(configs) != len(db_configs):
+        configs = db_configs
+
     items = None
     if row[1]:
         try:
             items = json.loads(row[1])
         except Exception:
             items = None
-    order = list(range(len(configs)))
-    order.sort(
-        key=lambda i: (
-            results.get(i) is None,
-            results.get(i) if results.get(i) is not None else 0,
-        )
-    )
-    # نتایج را به ترتیب جدید نگه می‌داریم تا sort_configs_by_ping درست برچسب بزند
-    # configs در ترتیب قدیمی است؛ results با ایندکس قدیمی
-    new_configs = sort_configs_by_ping(configs, results)
 
-    new_items = None
+    # permutation بر اساس همان results
+    order = list(range(len(configs)))
+    order.sort(key=lambda i: (0, _ping_ms(results, i)) if _ping_ms(results, i) is not None else (1, 0.0))
+
+    new_configs, aligned = sort_configs_by_ping(configs, results)
+
     if isinstance(items, list) and len(items) == len(configs):
-        new_items = [items[i] for i in order]
-        # هم‌تراز کردن name در items با remark نهایی (برای لایو)
-        for i, it in enumerate(new_items):
-            if not isinstance(it, dict):
-                continue
-            it = dict(it)
-            remark = get_remark(new_configs[i]) if i < len(new_configs) else ""
+        new_items = []
+        for new_i, old_i in enumerate(order):
+            it = items[old_i]
+            it = dict(it) if isinstance(it, dict) else {}
+            remark = get_remark(new_configs[new_i]) if new_i < len(new_configs) else ""
             if remark:
                 it["name"] = remark
-            else:
-                if it.get("name"):
-                    it["name"] = strip_strongest_label(str(it["name"]))
-            new_items[i] = it
+            elif it.get("name"):
+                it["name"] = strip_strongest_label(str(it["name"]))
+            new_items.append(it)
     else:
         new_items = _ensure_generated_items(new_configs, None)
 
-    # پین‌شده‌ها همیشه بالای لیست بمانند
+    # پین: بالا، ولی برچسب سریع‌ترین روی همان کانفیگ می‌ماند
     if isinstance(new_items, list) and len(new_items) == len(new_configs):
         new_configs, new_items = _pinned_first(new_configs, new_items)
 

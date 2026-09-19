@@ -2402,20 +2402,7 @@ async def ping_sub(callback: CallbackQuery):
         storage.set_sub_last_successful_ping(sub_id, callback.from_user.id)
     # مرتب‌سازی دائمی: کمترین پینگ بالا، تایم‌اوت پایین
     sorted_configs = storage.sort_sub_configs_by_ping(sub_id, callback.from_user.id, results) or old_configs
-    # results را با ترتیب جدید هم‌تراز کن
-    old_to_ms = {i: results.get(i) for i in range(len(old_configs))}
-    # بعد از sort، ایندکس‌های جدید با کانفیگ‌های sorted مطابقت دارند؛ برای نمایش، از ترتیب sorted استفاده می‌کنیم
-    new_results = {}
-    for new_i, cfg in enumerate(sorted_configs):
-        # پیدا کردن اولین ایندکس قدیمی این کانفیگ
-        try:
-            old_i = old_configs.index(cfg)
-            # اگر تکراری بود index فقط اولی را می‌دهد؛ برای دقت از fingerprint بهتر است ولی کافی است
-            new_results[new_i] = old_to_ms.get(old_i)
-            # مصرف‌شده را خنثی کن تا تکراری‌ها درست بمانند
-            old_configs[old_i] = None  # type: ignore
-        except ValueError:
-            new_results[new_i] = None
+    new_results = storage.map_ping_results_to_configs(old_configs, sorted_configs, results)
     chunks = _format_ping_lines(sub["name"], sorted_configs, new_results)
     note = "\n\n↕️ لیست بر اساس پینگ مرتب شد (سریع‌ترها بالا). بهترین: «سریع ترین»."
     chunks[0] = chunks[0].rstrip() + note
@@ -2443,17 +2430,10 @@ async def ping_generated(callback: CallbackQuery):
     results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
         storage.set_generated_last_successful_ping(gen_id, callback.from_user.id)
-    sorted_configs = storage.sort_generated_configs_by_ping(gen_id, callback.from_user.id, results) or old_configs
-    new_results = {}
-    leftovers = list(old_configs)
-    for new_i, cfg in enumerate(sorted_configs):
-        ms = None
-        for old_i, old_cfg in enumerate(leftovers):
-            if old_cfg is not None and old_cfg == cfg:
-                ms = results.get(old_i)
-                leftovers[old_i] = None
-                break
-        new_results[new_i] = ms
+    sorted_configs = storage.sort_generated_configs_by_ping(
+        gen_id, callback.from_user.id, results, configs_snapshot=old_configs
+    ) or old_configs
+    new_results = storage.map_ping_results_to_configs(old_configs, sorted_configs, results)
     chunks = _format_ping_lines(g["name"], sorted_configs, new_results)
     note = "\n\n↕️ لیست بر اساس پینگ مرتب شد (سریع‌ترها بالا). بهترین: «سریع ترین»."
     chunks[0] = chunks[0].rstrip() + note

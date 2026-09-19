@@ -688,20 +688,19 @@ async def api_ping_generated(request: web.Request) -> web.Response:
     results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
         storage.set_generated_last_successful_ping(gen_id, request["user_id"])
-    sorted_configs = storage.sort_generated_configs_by_ping(gen_id, request["user_id"], results) or old_configs
-    used = set()
+    sorted_configs = storage.sort_generated_configs_by_ping(
+        gen_id, request["user_id"], results, configs_snapshot=old_configs
+    ) or old_configs
+    aligned = storage.map_ping_results_to_configs(old_configs, sorted_configs, results)
     out = []
     for new_i, raw in enumerate(sorted_configs):
-        ms = None
-        for old_i, old_raw in enumerate(old_configs):
-            if old_i in used:
-                continue
-            if old_raw == raw:
-                ms = results.get(old_i)
-                used.add(old_i)
-                break
         out.append(
-            {"index": new_i, "protocol": get_protocol(raw), "remark": get_remark(raw) or "", "ms": ms}
+            {
+                "index": new_i,
+                "protocol": get_protocol(raw),
+                "remark": get_remark(raw) or "",
+                "ms": aligned.get(new_i),
+            }
         )
     alive = sum(1 for r in out if r["ms"] is not None)
     dead = len(out) - alive
