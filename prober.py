@@ -357,8 +357,13 @@ async def _http_via_socks(socks_port: int, timeout: float) -> tuple[bool, float 
                     ms = (time.monotonic() - start) * 1000
                     return True, ms, f"HTTP {resp.status_code}"
                 last_err = f"HTTP {resp.status_code}"
+        except ImportError as e:
+            return False, None, "پکیج socksio نصب نیست — requirements را آپدیت و دوباره دیپلوی کن"
         except Exception as e:
-            last_err = type(e).__name__ + (f": {e}" if str(e) else "")
+            msg = str(e) or type(e).__name__
+            if "socksio" in msg.lower() or "socks" in msg.lower() and "install" in msg.lower():
+                return False, None, "پکیج socksio نصب نیست — requirements را آپدیت و دوباره دیپلوی کن"
+            last_err = type(e).__name__ + (f": {msg}" if msg else "")
             continue
     return False, None, last_err
 
