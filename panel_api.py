@@ -12,6 +12,7 @@ from aiohttp import web
 
 import storage
 from config_parser import (
+    parse_config_details,
     get_host_port,
     config_fingerprint,
     decode_subscription,
@@ -47,11 +48,27 @@ async def _fetch_configs(sub_url: str) -> tuple[bool, list[str] | str]:
 
 
 def _config_summary(idx: int, raw: str, pinned: bool = False) -> dict:
+    details = parse_config_details(raw)
     return {
         "index": idx,
-        "protocol": get_protocol(raw),
-        "remark": get_remark(raw) or "",
+        "protocol": details.get("protocol") or get_protocol(raw),
+        "remark": details.get("remark") or get_remark(raw) or "",
         "pinned": bool(pinned),
+        "host": details.get("host") or "",
+        "port": details.get("port"),
+        "transport": details.get("transport") or details.get("network") or "",
+        "security": details.get("security") or "",
+        "network": details.get("network") or "",
+        "path": details.get("path") or "",
+        "sni": details.get("sni") or "",
+        "host_header": details.get("host_header") or "",
+        "flow": details.get("flow") or "",
+        "encryption": details.get("encryption") or "",
+        "alpn": details.get("alpn") or "",
+        "fp": details.get("fp") or "",
+        "uuid": details.get("uuid") or "",
+        "method": details.get("method") or "",
+        "details": details,
     }
 
 

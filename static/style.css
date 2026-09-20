@@ -1662,3 +1662,44 @@ html.tg-miniapp.modal-open {
   border-color: rgba(212, 175, 55, 0.35);
   background: rgba(212, 175, 55, 0.06);
 }
+
+
+/* مشخصات کانفیگ */
+.config-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  font-size: 0.85rem;
+}
+.detail-label {
+  color: var(--muted, #9aa3b2);
+  flex-shrink: 0;
+}
+.detail-value {
+  text-align: left;
+  word-break: break-all;
+  direction: ltr;
+}
+.detail-value code {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.82rem;
+  background: transparent;
+  color: inherit;
+}
+.cfg-host {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  opacity: 0.75;
+  direction: ltr;
+  margin-inline-start: 6px;
+}

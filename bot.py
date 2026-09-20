@@ -35,10 +35,12 @@ from config_parser import (
     get_host_port,
     decode_subscription,
     encode_subscription,
+    format_config_details_text,
     get_protocol,
     get_remark,
     make_customer_message_config,
     make_expiry_info_config,
+    parse_config_details,
     remaining_time_text,
     rename_config,
 )
@@ -1784,15 +1786,18 @@ async def gen_cfg_pick(callback: CallbackQuery):
     if idx < 0 or idx >= len(configs):
         return await callback.answer("ایندکس نامعتبر.", show_alert=True)
     raw = configs[idx]
-    remark = get_remark(raw) or "(بدون نام)"
-    proto = get_protocol(raw)
     flags = storage.get_generated_config_pinned_flags(g)
     is_pinned = bool(flags[idx]) if idx < len(flags) else False
     pin_line = "📌 پین شده\n" if is_pinned else ""
+    details = format_config_details_text(raw, html=True)
+    text_body = (
+        "🔍 <b>مشخصات کانفیگ</b>\n"
+        + pin_line
+        + f"اشتراک: {escape(g['name'])}\n\n"
+        + details
+    )
     await callback.message.edit_text(
-        f"⚙️ <b>[{escape(proto)}]</b> {escape(remark)}\n"
-        f"{pin_line}"
-        f"\nاشتراک: {escape(g['name'])}",
+        text_body,
         reply_markup=build_gen_cfg_action_keyboard(gen_id, idx, is_pinned),
         parse_mode="HTML",
     )
@@ -2606,6 +2611,29 @@ async def cancel_delete(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("cfg_pick:"))
 async def pick_config(callback: CallbackQuery, state: FSMContext):
+    _, sub_id, idx = callback.data.split(":")
+    sub_id, idx = int(sub_id), int(idx)
+    sub = storage.get_sub(sub_id, callback.from_user.id)
+    if not sub or idx >= len(sub["configs"]):
+        return await callback.answer("نامعتبر", show_alert=True)
+    raw = sub["configs"][idx]
+    details = format_config_details_text(raw, html=True)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"cfg_rename:{sub_id}:{idx}")],
+            [InlineKeyboardButton(text="« بازگشت", callback_data=f"sub_open:{sub_id}")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"🔍 <b>مشخصات کانفیگ</b>\n\n{details}",
+        reply_markup=kb,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("cfg_rename:"))
+async def start_rename_config(callback: CallbackQuery, state: FSMContext):
     _, sub_id, idx = callback.data.split(":")
     sub_id, idx = int(sub_id), int(idx)
     sub = storage.get_sub(sub_id, callback.from_user.id)

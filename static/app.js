@@ -184,6 +184,53 @@ async function boot() {
 
 // ---------- شل + رندر اصلی ----------
 
+
+function formatConfigDetailsHtml(c) {
+  const fields = [
+    ["protocol", "پروتکل"],
+    ["remark", "اسم"],
+    ["host", "سرور"],
+    ["port", "پورت"],
+    ["transport", "ترنسپورت"],
+    ["network", "شبکه"],
+    ["security", "امنیت / TLS"],
+    ["sni", "SNI"],
+    ["host_header", "Host Header"],
+    ["path", "Path / Service"],
+    ["flow", "Flow"],
+    ["encryption", "Encryption"],
+    ["alpn", "ALPN"],
+    ["fp", "Fingerprint"],
+    ["uuid", "UUID / ID"],
+    ["method", "Method"],
+  ];
+  const src = c.details || c;
+  const rows = [];
+  for (const [key, label] of fields) {
+    let val = src[key];
+    if (val === undefined || val === null || val === "") continue;
+    val = String(val);
+    if (key === "uuid" && val.length > 16) val = val.slice(0, 8) + "…" + val.slice(-4);
+    rows.push(`<div class="detail-row"><span class="detail-label">${esc(label)}</span><span class="detail-value"><code>${esc(val)}</code></span></div>`);
+  }
+  if (!rows.length) return '<p class="muted">مشخصاتی استخراج نشد</p>';
+  return `<div class="config-details">${rows.join("")}</div>`;
+}
+
+function showConfigDetails(c) {
+  const title = esc(c.remark || c.protocol || "کانفیگ");
+  openModal(`
+    <h2>🔍 مشخصات کانفیگ</h2>
+    <p class="muted" style="margin-bottom:12px"><span class="badge">${esc(c.protocol || "")}</span> ${title}</p>
+    ${formatConfigDetailsHtml(c)}
+    <div class="modal-actions">
+      <button class="btn" id="cfg-detail-close">بستن</button>
+    </div>
+  `);
+  document.getElementById("cfg-detail-close").addEventListener("click", closeModal);
+}
+
+
 function renderShell(body) {
   const showNav = state.view === "list";
   const logoutBtn = TG ? "" : `<a href="/panel/logout" class="btn-sm btn" style="text-decoration:none">${icon("logout", "icon-sm")} خروج</a>`;
@@ -509,8 +556,10 @@ function renderSubDetail(sub) {
         <input type="checkbox" class="cfg-check" data-idx="${c.index}" ${inCart ? "checked" : ""}/>
         <span class="badge">${esc(c.protocol)}</span>
         <span class="remark">${esc(c.remark || "(بدون نام)")}</span>
+        ${c.host ? `<span class="muted cfg-host">${esc(c.host)}${c.port ? ":" + c.port : ""}</span>` : ""}
         ${msBadge}
         <div class="config-actions gooey">
+          <button class="btn-sm btn btn-icon" data-cfg-info="${c.index}" title="مشخصات">ℹ️</button>
           <button class="btn-sm btn btn-icon" data-rename="${c.index}" title="رنیم">${icon("edit", "icon-sm")}</button>
         </div>
       </div>
@@ -574,6 +623,12 @@ function bindSubDetailEvents(sub) {
   app.querySelectorAll("[data-rename]").forEach((btn) => {
     btn.addEventListener("click", () => openRenameModal(sub, parseInt(btn.dataset.rename)));
   });
+    app.querySelectorAll("[data-cfg-info]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cfg = sub.configs.find((x) => x.index === parseInt(btn.dataset.cfgInfo));
+        if (cfg) showConfigDetails(cfg);
+      });
+    });
 }
 
 async function refreshSub(id) {
@@ -1007,11 +1062,13 @@ function renderGenDetail(gen) {
     <div class="config-row${c.pinned ? " config-pinned" : ""}">
       <span class="badge">${esc(c.protocol)}</span>
       <span class="remark">${pinBadge}${esc(c.remark || "(بدون نام)")}</span>
+      ${c.host ? `<span class="muted cfg-host">${esc(c.host)}${c.port ? ":" + c.port : ""}</span>` : ""}
       ${msBadge}
       <div class="config-actions gooey">
         <button class="btn-sm btn btn-icon" data-gen-pin="${c.index}" title="${pinTitle}">${pinIcon}</button>
         <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا">↑</button>
         <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین">↓</button>
+        <button class="btn-sm btn btn-icon" data-gen-info="${c.index}" title="مشخصات">ℹ️</button>
         <button class="btn-sm btn btn-icon" data-gen-rename="${c.index}" title="تغییر اسم">${icon("edit", "icon-sm")}</button>
         <button class="btn-sm btn btn-danger btn-icon" data-gen-del="${c.index}" title="حذف">${icon("trash", "icon-sm")}</button>
       </div>
@@ -1041,6 +1098,12 @@ function renderGenDetail(gen) {
     if (pingGen) pingGen.addEventListener("click", () => pingGenerated(gen.id));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
+    });
+    app.querySelectorAll("[data-gen-info]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cfg = (gen.configs || []).find((x) => x.index === parseInt(btn.dataset.genInfo));
+        if (cfg) showConfigDetails(cfg);
+      });
     });
     app.querySelectorAll("[data-gen-del]").forEach((btn) => {
       btn.addEventListener("click", () => confirmDeleteGenConfig(gen, parseInt(btn.dataset.genDel)));

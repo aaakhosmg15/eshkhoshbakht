@@ -88,6 +88,207 @@ def get_host_port(raw: str) -> tuple[str, int] | None:
     return None
 
 
+def parse_config_details(raw: str) -> dict:
+    """استخراج مشخصات خوانا از یک کانفیگ خام.
+
+    فیلدها (در صورت وجود):
+      protocol, remark, host, port, transport, security, network, path,
+      sni, host_header, flow, encryption, alpn, fp, uuid, method, password
+    """
+    raw = (raw or "").strip()
+    proto = get_protocol(raw)
+    remark = get_remark(raw) or ""
+    info: dict = {
+        "protocol": proto,
+        "remark": remark,
+        "host": "",
+        "port": None,
+        "transport": "",
+        "security": "",
+        "network": "",
+        "path": "",
+        "sni": "",
+        "host_header": "",
+        "flow": "",
+        "encryption": "",
+        "alpn": "",
+        "fp": "",
+        "uuid": "",
+        "method": "",
+        "password": "",
+    }
+
+    hp = get_host_port(raw)
+    if hp:
+        info["host"], info["port"] = hp[0], hp[1]
+
+    if raw.startswith("vmess://"):
+        try:
+            data = json.loads(_b64decode(raw[len("vmess://"):]))
+            info["host"] = data.get("add") or info["host"]
+            try:
+                info["port"] = int(data.get("port") or 0) or info["port"]
+            except (TypeError, ValueError):
+                pass
+            info["uuid"] = str(data.get("id") or "")
+            info["encryption"] = str(data.get("scy") or data.get("security") or "auto")
+            net = str(data.get("net") or "tcp")
+            info["network"] = net
+            info["transport"] = net
+            info["path"] = str(data.get("path") or "")
+            info["host_header"] = str(data.get("host") or "")
+            tls = str(data.get("tls") or "")
+            info["security"] = tls if tls else "none"
+            info["sni"] = str(data.get("sni") or data.get("host") or "")
+            info["alpn"] = str(data.get("alpn") or "")
+            info["fp"] = str(data.get("fp") or "")
+            if data.get("type") and data.get("type") != "none":
+                info["transport"] = f"{net}/{data.get('type')}"
+        except Exception:
+            pass
+        return _clean_details(info)
+
+    # URI-based: vless / trojan / ss / hysteria2 / tuic / ...
+    try:
+        # جدا کردن fragment
+        main = raw.split("#", 1)[0]
+        parsed = urlparse(main)
+        qs = {}
+        if parsed.query:
+            from urllib.parse import parse_qs
+            for k, v in parse_qs(parsed.query, keep_blank_values=True).items():
+                qs[k.lower()] = v[0] if v else ""
+
+        if not info["host"] and parsed.hostname:
+            info["host"] = parsed.hostname
+        if not info["port"] and parsed.port:
+            info["port"] = parsed.port
+
+        # userinfo: uuid یا method:pass
+        if parsed.username:
+            user = unquote(parsed.username)
+            if parsed.password:
+                info["method"] = user
+                info["password"] = unquote(parsed.password)
+            elif proto in ("vless", "trojan", "tuic", "hysteria2", "hy2"):
+                info["uuid"] = user
+            elif proto == "ss":
+                # ss://method:password@host:port  یا base64
+                if ":" in user:
+                    mth, pwd = user.split(":", 1)
+                    info["method"] = mth
+                    info["password"] = pwd
+                else:
+                    info["uuid"] = user
+
+        # پارامترهای رایج
+        net = qs.get("type") or qs.get("network") or qs.get("transport") or ""
+        if net:
+            info["network"] = net
+            info["transport"] = net
+        sec = qs.get("security") or qs.get("tls") or ""
+        if sec:
+            info["security"] = sec
+        elif proto in ("vless", "trojan") and not sec:
+            info["security"] = "none"
+        info["path"] = qs.get("path") or qs.get("serviceName") or qs.get("servicename") or info["path"]
+        info["sni"] = qs.get("sni") or qs.get("peer") or qs.get("host") or info["sni"]
+        info["host_header"] = qs.get("host") or qs.get("authority") or info["host_header"]
+        info["flow"] = qs.get("flow") or ""
+        info["encryption"] = qs.get("encryption") or info["encryption"]
+        info["alpn"] = qs.get("alpn") or ""
+        info["fp"] = qs.get("fp") or qs.get("fingerprint") or ""
+        if qs.get("headerType") and qs.get("headerType") != "none":
+            info["transport"] = f"{info['transport'] or net}/{qs.get('headerType')}".strip("/")
+        if qs.get("mode"):
+            info["transport"] = f"{info['transport'] or net}/{qs.get('mode')}".strip("/")
+        if qs.get("serviceName"):
+            info["path"] = info["path"] or qs.get("serviceName")
+            if not info["transport"]:
+                info["transport"] = "grpc"
+                info["network"] = "grpc"
+    except Exception:
+        pass
+
+    # ss:// base64 بدون userinfo در urlparse
+    if proto == "ss" and not info["host"]:
+        try:
+            body = raw[len("ss://"):].split("#", 1)[0]
+            if "@" not in body:
+                decoded = _b64decode(body).decode("utf-8", errors="ignore")
+                # method:password@host:port
+                m = re.match(r"([^:]+):([^@]+)@([^:]+):(\d+)", decoded)
+                if m:
+                    info["method"] = m.group(1)
+                    info["password"] = m.group(2)
+                    info["host"] = m.group(3)
+                    info["port"] = int(m.group(4))
+        except Exception:
+            pass
+
+    return _clean_details(info)
+
+
+def _clean_details(info: dict) -> dict:
+    """حذف فیلدهای خالی و نرمال‌سازی."""
+    out = {}
+    for k, v in info.items():
+        if v is None or v == "" or v == 0:
+            continue
+        out[k] = v
+    if "port" in info and info["port"]:
+        out["port"] = int(info["port"])
+    return out
+
+
+def format_config_details_text(raw: str, html: bool = True) -> str:
+    """متن فارسی خوانا از مشخصات کانفیگ برای نمایش در ربات."""
+    d = parse_config_details(raw)
+    labels = [
+        ("protocol", "پروتکل"),
+        ("remark", "اسم"),
+        ("host", "سرور"),
+        ("port", "پورت"),
+        ("transport", "ترنسپورت"),
+        ("network", "شبکه"),
+        ("security", "امنیت / TLS"),
+        ("sni", "SNI"),
+        ("host_header", "Host Header"),
+        ("path", "Path / Service"),
+        ("flow", "Flow"),
+        ("encryption", "Encryption"),
+        ("alpn", "ALPN"),
+        ("fp", "Fingerprint"),
+        ("uuid", "UUID / ID"),
+        ("method", "Method"),
+    ]
+    lines = []
+    for key, label in labels:
+        val = d.get(key)
+        if val is None or val == "":
+            continue
+        # UUID/password را کوتاه نشان بده
+        s = str(val)
+        if key == "uuid" and len(s) > 12:
+            s = s[:8] + "…" + s[-4:]
+        if html:
+            lines.append(f"• <b>{label}:</b> <code>{_esc(s)}</code>")
+        else:
+            lines.append(f"• {label}: {s}")
+    return "\n".join(lines) if lines else ("(مشخصاتی استخراج نشد)" if not html else "(مشخصاتی استخراج نشد)")
+
+
+def _esc(s: str) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+
+
 
 # ---------- پرچم کشور از روی اسم ----------
 
