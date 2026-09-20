@@ -517,24 +517,34 @@ def reorder_config_in_generated(gen_id: int, user_id: int, idx: int, direction: 
 
 def _ensure_generated_items(configs: list[str], items) -> list[dict]:
     """اگر items نباشد یا طولش نخواند، از روی configs می‌سازد (برای پین روی snapshot)."""
-    from config_parser import config_fingerprint, get_remark
+    from config_parser import config_fingerprint, get_remark, get_host_port
 
     if isinstance(items, list) and len(items) == len(configs):
         out = []
-        for it in items:
-            out.append(dict(it) if isinstance(it, dict) else {})
+        for i, it in enumerate(items):
+            d = dict(it) if isinstance(it, dict) else {}
+            # اگر host/port نداشت، از configs فعلی پر کن
+            if "host" not in d or "port" not in d:
+                hp = get_host_port(configs[i]) if i < len(configs) else None
+                if hp:
+                    d.setdefault("host", hp[0])
+                    d.setdefault("port", int(hp[1]))
+            out.append(d)
         return out
     result = []
     for i, raw in enumerate(configs):
-        result.append(
-            {
-                "sub_id": -1,
-                "index": i,
-                "fp": config_fingerprint(raw),
-                "name": get_remark(raw) or "",
-                "pinned": False,
-            }
-        )
+        entry = {
+            "sub_id": -1,
+            "index": i,
+            "fp": config_fingerprint(raw),
+            "name": get_remark(raw) or "",
+            "pinned": False,
+        }
+        hp = get_host_port(raw)
+        if hp:
+            entry["host"] = hp[0]
+            entry["port"] = int(hp[1])
+        result.append(entry)
     return result
 
 
@@ -725,9 +735,13 @@ def sort_generated_configs_by_ping(
 ) -> list[str] | None:
     """مرتب‌سازی اشتراک سفارشی با همان لیستی که پینگ شده.
 
-    تضمین می‌کند که هر کانفیگ با remark اصلی خودش جابه‌جا شود و اسم‌ها
-    بین سرورهای مختلف (مثلاً آلمان ↔ فنلاند) قاطی نشوند.
-    items هم دقیقاً با همان permutation مرتب می‌شوند.
+    قوانین حیاتی برای جلوگیری از جابه‌جایی اسم‌ها (آلمان ↔ انگلیس و ...):
+    1) configs و items با دقیقاً یک permutation جابه‌جا می‌شوند.
+    2) item["fp"] و item["index"] دست‌نخورده می‌مانند — این‌ها باید به
+       کانفیگ اصلی در اشتراک منبع اشاره کنند، نه به نسخهٔ رنیم‌شده.
+       اگر fp را با remark سفارشی عوض کنیم، resolve بعدی اشتباه مچ می‌کند
+       و اسم یک سرور روی IP سرور دیگر می‌نشیند.
+    3) فقط item["name"] (اسم نمایشی) با remark جدید (مثلاً برچسب سریع‌ترین) به‌روز می‌شود.
     """
     from config_parser import get_remark, strip_strongest_label
 
@@ -741,12 +755,8 @@ def sort_generated_configs_by_ping(
         return None
 
     db_configs = json.loads(row[0])
-    # حتماً همان ترتیبی که پینگ شده
+    # همان لیستی که واقعاً پینگ شده
     configs = list(configs_snapshot) if configs_snapshot is not None else list(db_configs)
-    if len(configs) != len(db_configs):
-        # اگر resolve طول را عوض کرده، از snapshot پینگ‌شده استفاده کن
-        # ولی برای ذخیره باید طول یکسان باشد؛ در این حالت از configs پینگ‌شده می‌رویم
-        pass
 
     items = None
     if row[1]:
@@ -755,31 +765,34 @@ def sort_generated_configs_by_ping(
         except Exception:
             items = None
 
-    # یک permutation واحد از sort_configs_by_ping — جلوگیری از mismatch
+    # یک permutation واحد — configs و items با هم حرکت می‌کنند
     new_configs, _aligned, order = sort_configs_by_ping(configs, results)
 
     if isinstance(items, list) and len(items) == len(configs):
+        from config_parser import get_host_port
         new_items = []
         for new_i, old_i in enumerate(order):
-            it = dict(items[old_i]) if isinstance(items[old_i], dict) else {}
-            # اسم را از خود کانفیگی که با این item جابه‌جا شده می‌گیریم
-            # (شامل برچسب سریع‌ترین اگر روی همین کانفیگ باشد)
+            src = items[old_i]
+            it = dict(src) if isinstance(src, dict) else {}
+            # فقط اسم نمایشی را از کانفیگ جابه‌جاشده بگیر (شامل «سریع‌ترین» در صورت نیاز)
             remark = get_remark(new_configs[new_i]) if new_i < len(new_configs) else ""
             if remark:
                 it["name"] = remark
             elif it.get("name"):
                 it["name"] = strip_strongest_label(str(it["name"]))
-            # fp را هم با کانفیگ جدید هم‌تراز نگه می‌داریم تا resolve بعدی قاطی نکند
-            try:
-                from config_parser import config_fingerprint
-                it["fp"] = config_fingerprint(new_configs[new_i])
-            except Exception:
-                pass
+            # fp و index را عمداً عوض نمی‌کنیم — هویت منبع باید ثابت بماند
+            # host/port را از کانفیگ فعلی ذخیره می‌کنیم تا resolve بعدی
+            # حتی اگر fp خراب شده باشد، به IP درست وصل شود (نه اسم اشتباه روی سرور دیگر)
+            if new_i < len(new_configs):
+                hp = get_host_port(new_configs[new_i])
+                if hp:
+                    it["host"] = hp[0]
+                    it["port"] = int(hp[1])
             new_items.append(it)
     else:
         new_items = _ensure_generated_items(new_configs, None)
 
-    # پین: بالا، ولی جفت config+item با هم حرکت می‌کنند → اسم جابه‌جا نمی‌شود
+    # پین: config و item با هم بالا می‌آیند → اسم جابه‌جا نمی‌شود
     if isinstance(new_items, list) and len(new_items) == len(new_configs):
         new_configs, new_items = _pinned_first(new_configs, new_items)
 
@@ -892,9 +905,14 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict) -> tuple[str |
     raw = None
     new_fp = None
 
-    # ۱) جستجو با اثرانگشت
-    # اگر چند کانفیگ fp یکسان داشته باشند (دادهٔ قدیمی قبل از لحاظ remark)،
-    # ترجیح با ایندکس ذخیره‌شده است تا Usage و Active قاطی نشوند.
+    from config_parser import get_host_port, strip_strongest_label, get_remark as _gr
+
+    def _host_key(c: str):
+        hp = get_host_port(c)
+        return (hp[0], hp[1]) if hp else None
+
+    # ۱) جستجو با اثرانگشت دقیق
+    # اگر چند کانفیگ fp یکسان داشته باشند، ترجیح با ایندکس ذخیره‌شده است.
     if fp:
         matches = [i for i, cand in enumerate(configs) if config_fingerprint(cand) == fp]
         if len(matches) == 1:
@@ -907,14 +925,42 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict) -> tuple[str |
                 raw = configs[matches[0]]
             new_fp = config_fingerprint(raw)
 
-    # ۲) اگر پیدا نشد، از ایندکس استفاده کن (کانفیگ جابه‌جا / remark عوض شده)
+    # ۲) مچ با host:port ذخیره‌شده در item (بعد از پینگ ذخیره می‌شود)
+    #    این جلوی جابه‌جایی اسم آلمان روی IP انگلیس را می‌گیرد حتی اگر fp خراب باشد.
+    if raw is None:
+        host = item.get("host")
+        port = item.get("port")
+        if host and port is not None:
+            try:
+                port = int(port)
+            except (TypeError, ValueError):
+                port = None
+            if port is not None:
+                host_matches = [
+                    i for i, cand in enumerate(configs)
+                    if _host_key(cand) == (host, port)
+                ]
+                if len(host_matches) == 1:
+                    raw = configs[host_matches[0]]
+                    new_fp = config_fingerprint(raw)
+                elif len(host_matches) > 1:
+                    # چند نود با همان IP — ترجیح ایندکس ذخیره‌شده
+                    if isinstance(idx, int) and idx in host_matches:
+                        raw = configs[idx]
+                    else:
+                        raw = configs[host_matches[0]]
+                    new_fp = config_fingerprint(raw)
+
+    # ۳) اگر هنوز پیدا نشد، از ایندکس استفاده کن (آخرین راه)
     if raw is None and isinstance(idx, int) and 0 <= idx < len(configs):
         raw = configs[idx]
         new_fp = config_fingerprint(raw)
 
+    # ۴) هیچ‌چیز پیدا نشد
     if raw is None:
         return None, None
 
+    # اسم سفارشی را اعمال کن، ولی برچسب «سریع‌ترین» را فقط اگر در name ذخیره شده نگه دار
     custom_name = (item.get("name") or "").strip()
     if custom_name:
         raw = rename_config(raw, custom_name)

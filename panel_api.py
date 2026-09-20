@@ -12,6 +12,7 @@ from aiohttp import web
 
 import storage
 from config_parser import (
+    get_host_port,
     config_fingerprint,
     decode_subscription,
     encode_subscription,
@@ -341,12 +342,17 @@ async def api_build_custom(request: web.Request) -> web.Response:
         custom_name = (item.get("name") or "").strip()
         raw = rename_config(src_raw, custom_name) if custom_name else src_raw
         final_configs.append(raw)
-        recipe.append({
+        _item = {
             "sub_id": sub_id,
             "index": idx,
             "fp": config_fingerprint(src_raw),
             "name": custom_name,
-        })
+        }
+        _hp = get_host_port(src_raw)
+        if _hp:
+            _item["host"] = _hp[0]
+            _item["port"] = int(_hp[1])
+        recipe.append(_item)
 
     expires_at = None
     if expiry_days > 0:
@@ -444,12 +450,17 @@ async def api_add_to_generated(request: web.Request) -> web.Response:
         custom_name = (item.get("name") or "").strip()
         raw = rename_config(src_raw, custom_name) if custom_name else src_raw
         final_configs.append(raw)
-        recipe.append({
+        _item = {
             "sub_id": sub_id,
             "index": idx,
             "fp": config_fingerprint(src_raw),
             "name": custom_name,
-        })
+        }
+        _hp = get_host_port(src_raw)
+        if _hp:
+            _item["host"] = _hp[0]
+            _item["port"] = int(_hp[1])
+        recipe.append(_item)
 
     total = storage.add_configs_to_generated(gen_id, user_id, final_configs, new_items=recipe)
     if total is None:

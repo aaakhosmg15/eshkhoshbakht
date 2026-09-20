@@ -32,6 +32,7 @@ from aiogram.types import (
 import storage
 from config_parser import (
     config_fingerprint,
+    get_host_port,
     decode_subscription,
     encode_subscription,
     get_protocol,
@@ -1162,12 +1163,17 @@ async def select_done(callback: CallbackQuery, state: FSMContext):
     source_items = []
     for idx in queue:
         raw = sub["configs"][idx]
-        source_items.append({
+        _item = {
             "sub_id": sub_id,
             "index": idx,
             "fp": config_fingerprint(raw),
             "name": "",
-        })
+        }
+        _hp = get_host_port(raw)
+        if _hp:
+            _item["host"] = _hp[0]
+            _item["port"] = int(_hp[1])
+        source_items.append(_item)
     await state.update_data(
         rename_queue=queue,
         renamed_configs=[],
@@ -1584,12 +1590,17 @@ async def msel_done(callback: CallbackQuery, state: FSMContext):
         new_items = []
         for i in queue:
             it = pool[i]
-            new_items.append({
+            _item = {
                 "sub_id": it["sub_id"],
                 "index": it.get("index", 0),
                 "fp": config_fingerprint(it["raw"]),
                 "name": "",
-            })
+            }
+            _hp = get_host_port(it["raw"])
+            if _hp:
+                _item["host"] = _hp[0]
+                _item["port"] = int(_hp[1])
+            new_items.append(_item)
         total = storage.add_configs_to_generated(
             target_gen_id, callback.from_user.id, picked_raw, new_items=new_items
         )
@@ -1610,12 +1621,17 @@ async def msel_done(callback: CallbackQuery, state: FSMContext):
     source_items = []
     for i in queue:
         it = pool[i]
-        source_items.append({
+        _item = {
             "sub_id": it["sub_id"],
             "index": it.get("index", 0),
             "fp": config_fingerprint(it["raw"]),
             "name": "",
-        })
+        }
+        _hp = get_host_port(it["raw"])
+        if _hp:
+            _item["host"] = _hp[0]
+            _item["port"] = int(_hp[1])
+        source_items.append(_item)
     await state.update_data(
         rename_queue=list(range(len(fake_configs))),
         renamed_configs=[],
