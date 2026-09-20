@@ -7,23 +7,11 @@ const TG = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.
   ? window.Telegram.WebApp
   : null;
 
-// سبک‌سازی فوری برای مینی‌اپ / موبایل (قبل از رندر)
+// سبک‌سازی فقط برای مینی‌اپ تلگرام (سایت وب تغییر نمی‌کند)
 (function enableLiteUi() {
-  const mobile = (function () {
-    try {
-      if (TG) return true;
-      if (navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900) return true;
-      if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) return true;
-    } catch (e) {}
-    return false;
-  })();
-  if (!mobile) return;
-  document.documentElement.classList.add("lite-ui");
-  if (document.body) document.body.classList.add("lite-ui");
-  if (TG) {
-    document.documentElement.classList.add("tg-miniapp");
-    if (document.body) document.body.classList.add("tg-miniapp");
-  }
+  if (!TG) return;
+  document.documentElement.classList.add("tg-miniapp", "lite-ui");
+  if (document.body) document.body.classList.add("tg-miniapp", "lite-ui");
   const scene = document.getElementById("scene3d");
   if (scene) scene.remove();
 })();

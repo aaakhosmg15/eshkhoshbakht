@@ -1,43 +1,29 @@
 /**
- * scene3d.js — منظومه شمسی سه‌بعدی (فقط دسکتاپ / پنل وب)
- * روی مینی‌اپ تلگرام و موبایل کاملاً غیرفعال می‌شود تا روان بماند.
+ * scene3d.js — منظومه شمسی سه‌بعدی (فقط بصری)
+ * فقط در مینی‌اپ تلگرام غیرفعال می‌شود؛ پنل وب مثل قبل می‌ماند.
  */
 (function () {
   const scene = document.getElementById("scene3d");
-  if (!scene) return;
-
-  function isLightClient() {
-    try {
-      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
-        return true;
-      }
-    } catch (e) {}
-    try {
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        return true;
-      }
-    } catch (e) {}
-    // موبایل / صفحه باریک
-    try {
-      if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
-        return true;
-      }
-    } catch (e) {}
-    if (navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900) {
-      return true;
-    }
-    return false;
-  }
-
-  if (isLightClient()) {
-    document.documentElement.classList.add("lite-ui");
-    document.body && document.body.classList.add("lite-ui");
-    scene.remove();
-    return;
-  }
-
   const inner = document.getElementById("scene3dInner");
-  if (!inner) return;
+  if (!scene || !inner) return;
+
+  // فقط مینی‌اپ تلگرام (نه سایت موبایل)
+  try {
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+      document.documentElement.classList.add("tg-miniapp", "lite-ui");
+      if (document.body) document.body.classList.add("tg-miniapp", "lite-ui");
+      scene.remove();
+      return;
+    }
+  } catch (e) {}
+
+  const reduced =
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (reduced) {
+    scene.classList.add("reduced");
+  }
 
   function spawnStars(host, count, layerClass) {
     if (!host || host.children.length > 0) return;
@@ -63,18 +49,19 @@
     host.appendChild(frag);
   }
 
-  // تعداد ستاره کمتر از قبل
-  spawnStars(scene.querySelector(".space-stars.far"), 40, "star-far");
-  spawnStars(scene.querySelector(".space-stars.mid"), 28, "star-mid");
-  spawnStars(scene.querySelector(".space-stars.near"), 16, "star-near");
+  spawnStars(scene.querySelector(".space-stars.far"), 70, "star-far");
+  spawnStars(scene.querySelector(".space-stars.mid"), 50, "star-mid");
+  spawnStars(scene.querySelector(".space-stars.near"), 30, "star-near");
+  const legacy = scene.querySelector(".space-stars:not(.far):not(.mid):not(.near)");
+  if (legacy) spawnStars(legacy, 90, "star-mid");
 
   const belt = inner.querySelector(".asteroid-belt");
   if (belt && belt.children.length === 0) {
     const frag = document.createDocumentFragment();
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 48; i++) {
       const a = document.createElement("span");
       a.className = "asteroid";
-      const ang = (i / 24) * 360 + (Math.random() * 6 - 3);
+      const ang = (i / 48) * 360 + (Math.random() * 6 - 3);
       const rad = 48 + Math.random() * 6;
       a.style.setProperty("--a", ang + "deg");
       a.style.setProperty("--r", rad + "%");
@@ -86,16 +73,14 @@
     belt.appendChild(frag);
   }
 
-  // فاز تصادفی مدارها
   inner.querySelectorAll(".orbit").forEach(function (o) {
     o.style.setProperty("--phase", Math.random() * 360 + "deg");
   });
 
-  // parallax خیلی سبک — فقط دسکتاپ
   let targetX = 0, targetY = 0, curX = 0, curY = 0, raf = 0;
   function tick() {
-    curX += (targetX - curX) * 0.06;
-    curY += (targetY - curY) * 0.06;
+    curX += (targetX - curX) * 0.08;
+    curY += (targetY - curY) * 0.08;
     inner.style.transform =
       "rotateX(62deg) rotateZ(0deg) translate3d(" +
       curX.toFixed(2) + "px," + curY.toFixed(2) + "px,0)";
@@ -106,14 +91,13 @@
     function (e) {
       const cx = window.innerWidth / 2;
       const cy = window.innerHeight / 2;
-      targetX = ((e.clientX - cx) / cx) * 12;
-      targetY = ((e.clientY - cy) / cy) * 8;
+      targetX = ((e.clientX - cx) / cx) * 18;
+      targetY = ((e.clientY - cy) / cy) * 12;
     },
     { passive: true }
   );
   raf = requestAnimationFrame(tick);
 
-  // اگر تب مخفی شد انیمیشن را متوقف کن
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
       if (raf) cancelAnimationFrame(raf);
