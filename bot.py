@@ -2436,11 +2436,10 @@ async def ping_generated(callback: CallbackQuery):
     if not g:
         return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
     await callback.answer()
-    try:
-        await refresh_source_subs_for_gen(g)
-    except Exception:
-        pass
-    configs = storage.resolve_generated_configs(g, persist=True)
+    # مهم: قبل از پینگ resolve+persist نکن — همان لیست ذخیره‌شده (اسم چسبیده به IP) را پینگ کن
+    configs = list(g.get("configs") or [])
+    if not configs:
+        return await callback.message.answer("هیچ کانفیگی وجود نداره.")
     status = await callback.message.answer(f"در حال پینگ {len(configs)} کانفیگ...")
     old_configs = list(configs)
     results = await ping_configs(old_configs)

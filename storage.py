@@ -733,17 +733,23 @@ def sort_generated_configs_by_ping(
     results: dict[int, float | None],
     configs_snapshot: list[str] | None = None,
 ) -> list[str] | None:
-    """مرتب‌سازی اشتراک سفارشی با همان لیستی که پینگ شده.
+    """مرتب‌سازی اشتراک سفارشی — اسم هر کانفیگ به همان IP خودش می‌چسبد.
 
-    قوانین حیاتی برای جلوگیری از جابه‌جایی اسم‌ها (آلمان ↔ انگلیس و ...):
-    1) configs و items با دقیقاً یک permutation جابه‌جا می‌شوند.
-    2) item["fp"] و item["index"] دست‌نخورده می‌مانند — این‌ها باید به
-       کانفیگ اصلی در اشتراک منبع اشاره کنند، نه به نسخهٔ رنیم‌شده.
-       اگر fp را با remark سفارشی عوض کنیم، resolve بعدی اشتباه مچ می‌کند
-       و اسم یک سرور روی IP سرور دیگر می‌نشیند.
-    3) فقط item["name"] (اسم نمایشی) با remark جدید (مثلاً برچسب سریع‌ترین) به‌روز می‌شود.
+    روش کار (ضد جابه‌جایی آلمان/انگلیس):
+    - هر کانفیگ با item متناظرش یک جفت ثابت می‌سازد
+    - جفت‌ها با هم بر اساس پینگ جابه‌جا می‌شوند
+    - هیچ‌وقت اسم یک جفت به جفت دیگر منتقل نمی‌شود
+    - فقط برچسب «سریع‌ترین» روی همان جفتِ برنده اضافه/حذف می‌شود
+    - host/port داخل item ذخیره می‌شود برای resolve بعدی
     """
-    from config_parser import get_remark, strip_strongest_label
+    from config_parser import (
+        get_remark,
+        get_host_port,
+        rename_config,
+        strip_strongest_label,
+        with_strongest_label,
+        config_fingerprint,
+    )
 
     conn = _conn()
     row = conn.execute(
@@ -755,52 +761,91 @@ def sort_generated_configs_by_ping(
         return None
 
     db_configs = json.loads(row[0])
-    # همان لیستی که واقعاً پینگ شده
     configs = list(configs_snapshot) if configs_snapshot is not None else list(db_configs)
+    n = len(configs)
+    if n == 0:
+        conn.close()
+        return configs
 
-    items = None
+    items_raw = None
     if row[1]:
         try:
-            items = json.loads(row[1])
+            items_raw = json.loads(row[1])
         except Exception:
-            items = None
+            items_raw = None
+    items = _ensure_generated_items(configs, items_raw)
+    # طول items را با configs یکی نگه دار
+    if len(items) < n:
+        items = items + [{} for _ in range(n - len(items))]
+    elif len(items) > n:
+        items = items[:n]
 
-    # یک permutation واحد — configs و items با هم حرکت می‌کنند
-    new_configs, _aligned, order = sort_configs_by_ping(configs, results)
+    # ---- جفت‌سازی ثابت: (config, item) بر اساس ایندکس فعلی ----
+    pairs: list[tuple[str, dict]] = []
+    for i in range(n):
+        raw = configs[i]
+        it = dict(items[i]) if isinstance(items[i], dict) else {}
+        # اسم را از خود URI بگیر (منبع حقیقت برای این جفت)
+        remark = get_remark(raw) or (it.get("name") or "")
+        base = strip_strongest_label(remark)
+        if base != (remark or "").strip():
+            raw = rename_config(raw, base if base else "بدون نام")
+            remark = base
+        if base:
+            it["name"] = base
+        # host/port را از خود همین کانفیگ قفل کن
+        hp = get_host_port(raw)
+        if hp:
+            it["host"] = hp[0]
+            it["port"] = int(hp[1])
+        pairs.append((raw, it))
 
-    if isinstance(items, list) and len(items) == len(configs):
-        from config_parser import get_host_port
-        new_items = []
-        for new_i, old_i in enumerate(order):
-            src = items[old_i]
-            it = dict(src) if isinstance(src, dict) else {}
-            # فقط اسم نمایشی را از کانفیگ جابه‌جاشده بگیر (شامل «سریع‌ترین» در صورت نیاز)
-            remark = get_remark(new_configs[new_i]) if new_i < len(new_configs) else ""
-            if remark:
-                it["name"] = remark
-            elif it.get("name"):
-                it["name"] = strip_strongest_label(str(it["name"]))
-            # fp و index را عمداً عوض نمی‌کنیم — هویت منبع باید ثابت بماند
-            # host/port را از کانفیگ فعلی ذخیره می‌کنیم تا resolve بعدی
-            # حتی اگر fp خراب شده باشد، به IP درست وصل شود (نه اسم اشتباه روی سرور دیگر)
-            if new_i < len(new_configs):
-                hp = get_host_port(new_configs[new_i])
-                if hp:
-                    it["host"] = hp[0]
-                    it["port"] = int(hp[1])
-            new_items.append(it)
-    else:
-        new_items = _ensure_generated_items(new_configs, None)
+    # ---- مرتب‌سازی جفت‌ها بر اساس پینگ (نه جداگانه) ----
+    order = list(range(n))
 
-    # پین: config و item با هم بالا می‌آیند → اسم جابه‌جا نمی‌شود
-    if isinstance(new_items, list) and len(new_items) == len(new_configs):
+    def sort_key(i: int):
+        ms = _ping_ms(results, i)
+        if ms is None:
+            return (1, 0.0)
+        return (0, ms)
+
+    order.sort(key=sort_key)
+
+    new_configs: list[str] = []
+    new_items: list[dict] = []
+    aligned_ms: list[float | None] = []
+    for old_i in order:
+        raw, it = pairs[old_i]
+        new_configs.append(raw)
+        new_items.append(it)
+        aligned_ms.append(_ping_ms(results, old_i))
+
+    # ---- برچسب سریع‌ترین فقط روی همان جفت برنده ----
+    best_i = None
+    best_ms = None
+    for i, ms in enumerate(aligned_ms):
+        if ms is None:
+            continue
+        if best_ms is None or ms < best_ms:
+            best_ms = ms
+            best_i = i
+
+    if best_i is not None:
+        raw = new_configs[best_i]
+        it = new_items[best_i]
+        base = strip_strongest_label(get_remark(raw) or it.get("name") or "") or "بدون نام"
+        new_configs[best_i] = rename_config(raw, with_strongest_label(base))
+        it["name"] = with_strongest_label(base)
+
+    # پین: جفت‌ها با هم بالا می‌آیند
+    if len(new_items) == len(new_configs):
         new_configs, new_items = _pinned_first(new_configs, new_items)
 
     conn.execute(
         "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
         (
             json.dumps(new_configs),
-            json.dumps(new_items) if new_items is not None else None,
+            json.dumps(new_items),
             gen_id,
             user_id,
         ),
@@ -876,16 +921,16 @@ def add_configs_to_generated(
     return len(existing)
 
 
-def _resolve_one_item(item: dict, user_id: int, subs_cache: dict) -> tuple[str | None, str | None]:
-    """یک آیتم منبع را به کانفیگ خام فعلی تبدیل می‌کند.
-    خروجی: (raw_config_or_None, new_fingerprint_or_None)
-    اولویت تطبیق:
-      ۱) اثرانگشت (fp) — دقیق‌ترین
-      ۲) ایندکس — اگر fp عوض شده باشد (مثلاً آدرس سرور تغییر کرده)
-    اگر name خالی باشد، remark فعلی منبع حفظ می‌شود (لایو).
-    اگر name پر باشد، همان اسم سفارشی ادمین اعمال می‌شود.
+def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
+    """یک آیتم recipe را به کانفیگ خام منبع resolve می‌کند.
+
+    اولویت مچ (ضد جابه‌جایی اسم):
+    1) host:port ذخیره‌شده در item  ← مطمئن‌ترین
+    2) اثرانگشت fp
+    3) ایندکس در منبع
+    بعد اسم سفارشی روی همان raw اعمال می‌شود.
     """
-    from config_parser import config_fingerprint, rename_config
+    from config_parser import config_fingerprint, rename_config, get_host_port
 
     try:
         sub_id = int(item["sub_id"])
@@ -905,15 +950,35 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict) -> tuple[str |
     raw = None
     new_fp = None
 
-    from config_parser import get_host_port, strip_strongest_label, get_remark as _gr
-
     def _host_key(c: str):
         hp = get_host_port(c)
         return (hp[0], hp[1]) if hp else None
 
-    # ۱) جستجو با اثرانگشت دقیق
-    # اگر چند کانفیگ fp یکسان داشته باشند، ترجیح با ایندکس ذخیره‌شده است.
-    if fp:
+    # ۱) اولویت با host:port — اسم آلمان فقط روی IP آلمان می‌ماند
+    host = item.get("host")
+    port = item.get("port")
+    if host is not None and port is not None:
+        try:
+            port_i = int(port)
+        except (TypeError, ValueError):
+            port_i = None
+        if port_i is not None:
+            host_matches = [
+                i for i, cand in enumerate(configs)
+                if _host_key(cand) == (host, port_i)
+            ]
+            if len(host_matches) == 1:
+                raw = configs[host_matches[0]]
+                new_fp = config_fingerprint(raw)
+            elif len(host_matches) > 1:
+                if isinstance(idx, int) and idx in host_matches:
+                    raw = configs[idx]
+                else:
+                    raw = configs[host_matches[0]]
+                new_fp = config_fingerprint(raw)
+
+    # ۲) اثرانگشت
+    if raw is None and fp:
         matches = [i for i, cand in enumerate(configs) if config_fingerprint(cand) == fp]
         if len(matches) == 1:
             raw = configs[matches[0]]
@@ -925,46 +990,19 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict) -> tuple[str |
                 raw = configs[matches[0]]
             new_fp = config_fingerprint(raw)
 
-    # ۲) مچ با host:port ذخیره‌شده در item (بعد از پینگ ذخیره می‌شود)
-    #    این جلوی جابه‌جایی اسم آلمان روی IP انگلیس را می‌گیرد حتی اگر fp خراب باشد.
-    if raw is None:
-        host = item.get("host")
-        port = item.get("port")
-        if host and port is not None:
-            try:
-                port = int(port)
-            except (TypeError, ValueError):
-                port = None
-            if port is not None:
-                host_matches = [
-                    i for i, cand in enumerate(configs)
-                    if _host_key(cand) == (host, port)
-                ]
-                if len(host_matches) == 1:
-                    raw = configs[host_matches[0]]
-                    new_fp = config_fingerprint(raw)
-                elif len(host_matches) > 1:
-                    # چند نود با همان IP — ترجیح ایندکس ذخیره‌شده
-                    if isinstance(idx, int) and idx in host_matches:
-                        raw = configs[idx]
-                    else:
-                        raw = configs[host_matches[0]]
-                    new_fp = config_fingerprint(raw)
-
-    # ۳) اگر هنوز پیدا نشد، از ایندکس استفاده کن (آخرین راه)
+    # ۳) ایندکس
     if raw is None and isinstance(idx, int) and 0 <= idx < len(configs):
         raw = configs[idx]
         new_fp = config_fingerprint(raw)
 
-    # ۴) هیچ‌چیز پیدا نشد
     if raw is None:
         return None, None
 
-    # اسم سفارشی را اعمال کن، ولی برچسب «سریع‌ترین» را فقط اگر در name ذخیره شده نگه دار
     custom_name = (item.get("name") or "").strip()
     if custom_name:
         raw = rename_config(raw, custom_name)
     return raw, new_fp
+
 
 
 def resolve_generated_configs(gen: dict, persist: bool = True) -> list[str]:

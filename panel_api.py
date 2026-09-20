@@ -685,16 +685,18 @@ async def api_backup_restore(request: web.Request) -> web.Response:
 
 
 async def api_ping_generated(request: web.Request) -> web.Response:
-    """پینگ کانفیگ‌های یک اشتراک سفارشی (با resolve لایو) و مرتب‌سازی دائمی بر اساس پینگ."""
+    """پینگ کانفیگ‌های یک اشتراک سفارشی و مرتب‌سازی دائمی بر اساس پینگ.
+
+    مهم: قبل از پینگ resolve+persist نمی‌کنیم تا اسم‌ها با IP جابه‌جا نشوند.
+    روی همان لیست ذخیره‌شده (اسم چسبیده به URI) پینگ و sort می‌کنیم.
+    """
     gen_id = int(request.match_info["gen_id"])
     gen = storage.get_generated_by_id(gen_id, request["user_id"])
     if not gen:
         return _err("پیدا نشد.", 404)
-    try:
-        await _refresh_source_subs_for_gen(gen)
-    except Exception:
-        pass
-    configs = storage.resolve_generated_configs(gen, persist=True)
+    configs = list(gen.get("configs") or [])
+    if not configs:
+        return _err("هیچ کانفیگی وجود نداره.")
     old_configs = list(configs)
     results = await ping_configs(old_configs)
     if any(ms is not None for ms in results.values()):
