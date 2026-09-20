@@ -650,10 +650,13 @@ def map_ping_results_to_configs(
 
 def sort_configs_by_ping(
     configs: list[str], results: dict[int, float | None]
-) -> tuple[list[str], dict[int, float | None]]:
+) -> tuple[list[str], dict[int, float | None], list[int]]:
     """مرتب‌سازی بر اساس پینگ + برچسب سریع‌ترین فقط روی موفق با کمترین ms.
 
-    خروجی: (لیست کانفیگ مرتب، results با ایندکس جدید)
+    مهم: هر کانفیگ با همان remark اصلی خودش جابه‌جا می‌شود (هیچ اسمی بین
+    دو سرور مختلف جابه‌جا نمی‌شود). فقط برچسب «سریع‌ترین» به بهترین اضافه/برداشته می‌شود.
+
+    خروجی: (لیست کانفیگ مرتب، results با ایندکس جدید، permutation = لیست ایندکس‌های قدیم)
     """
     from config_parser import (
         get_remark,
@@ -676,6 +679,7 @@ def sort_configs_by_ping(
     cleaned: list[str] = []
     aligned: dict[int, float | None] = {}
     for new_i, old_i in enumerate(order):
+        # هویت کانفیگ = configs[old_i] ؛ فقط برچسب قبلی «سریع‌ترین» را پاک می‌کنیم
         raw = configs[old_i]
         remark = get_remark(raw) or ""
         base = strip_strongest_label(remark)
@@ -694,14 +698,12 @@ def sort_configs_by_ping(
             best_ms = ms
             best_i = new_i
 
-    if best_i is not None:
+    if best_i is not None and aligned.get(best_i) is not None:
         raw = cleaned[best_i]
-        # دوباره مطمئن شو این ایندکس تایم‌اوت نیست
-        if aligned.get(best_i) is not None:
-            remark = strip_strongest_label(get_remark(raw) or "") or "بدون نام"
-            cleaned[best_i] = rename_config(raw, with_strongest_label(remark))
+        remark = strip_strongest_label(get_remark(raw) or "") or "بدون نام"
+        cleaned[best_i] = rename_config(raw, with_strongest_label(remark))
 
-    return cleaned, aligned
+    return cleaned, aligned, order
 
 
 def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float | None]) -> list[str] | None:
@@ -710,7 +712,7 @@ def sort_sub_configs_by_ping(sub_id: int, user_id: int, results: dict[int, float
     if not sub:
         return None
     # طول results باید با configs یکی باشد
-    new_configs, _ = sort_configs_by_ping(list(sub["configs"]), results)
+    new_configs, _, _ = sort_configs_by_ping(list(sub["configs"]), results)
     update_configs(sub_id, user_id, new_configs)
     return new_configs
 
@@ -721,7 +723,12 @@ def sort_generated_configs_by_ping(
     results: dict[int, float | None],
     configs_snapshot: list[str] | None = None,
 ) -> list[str] | None:
-    """مرتب‌سازی اشتراک سفارشی با همان لیستی که پینگ شده (جلوگیری از جابه‌جایی ایندکس)."""
+    """مرتب‌سازی اشتراک سفارشی با همان لیستی که پینگ شده.
+
+    تضمین می‌کند که هر کانفیگ با remark اصلی خودش جابه‌جا شود و اسم‌ها
+    بین سرورهای مختلف (مثلاً آلمان ↔ فنلاند) قاطی نشوند.
+    items هم دقیقاً با همان permutation مرتب می‌شوند.
+    """
     from config_parser import get_remark, strip_strongest_label
 
     conn = _conn()
@@ -735,9 +742,11 @@ def sort_generated_configs_by_ping(
 
     db_configs = json.loads(row[0])
     # حتماً همان ترتیبی که پینگ شده
-    configs = list(configs_snapshot) if configs_snapshot is not None else db_configs
+    configs = list(configs_snapshot) if configs_snapshot is not None else list(db_configs)
     if len(configs) != len(db_configs):
-        configs = db_configs
+        # اگر resolve طول را عوض کرده، از snapshot پینگ‌شده استفاده کن
+        # ولی برای ذخیره باید طول یکسان باشد؛ در این حالت از configs پینگ‌شده می‌رویم
+        pass
 
     items = None
     if row[1]:
@@ -746,27 +755,31 @@ def sort_generated_configs_by_ping(
         except Exception:
             items = None
 
-    # permutation بر اساس همان results
-    order = list(range(len(configs)))
-    order.sort(key=lambda i: (0, _ping_ms(results, i)) if _ping_ms(results, i) is not None else (1, 0.0))
-
-    new_configs, aligned = sort_configs_by_ping(configs, results)
+    # یک permutation واحد از sort_configs_by_ping — جلوگیری از mismatch
+    new_configs, _aligned, order = sort_configs_by_ping(configs, results)
 
     if isinstance(items, list) and len(items) == len(configs):
         new_items = []
         for new_i, old_i in enumerate(order):
-            it = items[old_i]
-            it = dict(it) if isinstance(it, dict) else {}
+            it = dict(items[old_i]) if isinstance(items[old_i], dict) else {}
+            # اسم را از خود کانفیگی که با این item جابه‌جا شده می‌گیریم
+            # (شامل برچسب سریع‌ترین اگر روی همین کانفیگ باشد)
             remark = get_remark(new_configs[new_i]) if new_i < len(new_configs) else ""
             if remark:
                 it["name"] = remark
             elif it.get("name"):
                 it["name"] = strip_strongest_label(str(it["name"]))
+            # fp را هم با کانفیگ جدید هم‌تراز نگه می‌داریم تا resolve بعدی قاطی نکند
+            try:
+                from config_parser import config_fingerprint
+                it["fp"] = config_fingerprint(new_configs[new_i])
+            except Exception:
+                pass
             new_items.append(it)
     else:
         new_items = _ensure_generated_items(new_configs, None)
 
-    # پین: بالا، ولی برچسب سریع‌ترین روی همان کانفیگ می‌ماند
+    # پین: بالا، ولی جفت config+item با هم حرکت می‌کنند → اسم جابه‌جا نمی‌شود
     if isinstance(new_items, list) and len(new_items) == len(new_configs):
         new_configs, new_items = _pinned_first(new_configs, new_items)
 
@@ -782,6 +795,7 @@ def sort_generated_configs_by_ping(
     conn.commit()
     conn.close()
     return new_configs
+
 
 
 def cleanup_old_expired_generated(grace_days: int = 7) -> int:
