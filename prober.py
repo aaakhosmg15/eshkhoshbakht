@@ -36,7 +36,11 @@ PROBE_URLS = [
     u.strip()
     for u in os.environ.get(
         "PROBE_URLS",
-        "https://www.gstatic.com/generate_204,https://cp.cloudflare.com/,http://captive.apple.com/",
+        "http://captive.apple.com/,"
+        "http://connectivitycheck.gstatic.com/generate_204,"
+        "https://www.gstatic.com/generate_204,"
+        "https://cp.cloudflare.com/,"
+        "http://www.msftconnecttest.com/connecttest.txt",
     ).split(",")
     if u.strip()
 ]
@@ -117,12 +121,36 @@ def _stream_settings_from_qs(qs: dict[str, str]) -> dict:
                 "path": qs.get("path") or "/",
                 "host": [qs.get("host")] if qs.get("host") else [],
             }
-    elif network == "splithttp":
-        stream["network"] = "splithttp"
-        stream["splithttpSettings"] = {
+    elif network in ("xhttp", "splithttp"):
+        # Xray جدید: xhttp (قبلاً splithttp)
+        # mode: auto | packet-up | stream-up | stream-one
+        mode = (qs.get("mode") or "auto").lower()
+        xhttp = {
             "path": qs.get("path") or "/",
-            "host": qs.get("host") or "",
+            "host": qs.get("host") or qs.get("authority") or "",
+            "mode": mode if mode in ("auto", "packet-up", "stream-up", "stream-one") else "auto",
         }
+        # پارامترهای اختیاری رایج در لینک‌ها
+        if qs.get("extra"):
+            try:
+                extra = json.loads(qs["extra"])
+                if isinstance(extra, dict):
+                    xhttp["extra"] = extra
+            except Exception:
+                pass
+        for key in ("xPaddingBytes", "xmux", "noGRPCHeader", "noSSEHeader"):
+            if qs.get(key.lower()) or qs.get(key):
+                val = qs.get(key.lower()) or qs.get(key)
+                xhttp[key] = val
+        stream["network"] = "xhttp"
+        stream["xhttpSettings"] = xhttp
+        # سازگاری با هسته‌های کمی قدیمی‌تر که هنوز splithttp می‌خواهند
+        if network == "splithttp":
+            stream["splithttpSettings"] = {
+                "path": xhttp["path"],
+                "host": xhttp["host"],
+                "mode": xhttp["mode"],
+            }
     else:
         stream["network"] = "tcp"
         header_type = (qs.get("headertype") or qs.get("headerType") or "none").lower()
@@ -139,6 +167,9 @@ def _stream_settings_from_qs(qs: dict[str, str]) -> dict:
             tls["fingerprint"] = qs.get("fp") or qs.get("fingerprint")
         if qs.get("alpn"):
             tls["alpn"] = [a.strip() for a in qs["alpn"].split(",") if a.strip()]
+        # برای xhttp اغلب h2/http1.1 لازم است
+        if stream.get("network") == "xhttp" and "alpn" not in tls:
+            tls["alpn"] = ["h2", "http/1.1"]
         if security == "reality":
             stream["security"] = "reality"
             stream["realitySettings"] = {
@@ -340,31 +371,55 @@ def build_xray_config(outbound: dict, socks_port: int) -> dict:
 
 
 async def _http_via_socks(socks_port: int, timeout: float) -> tuple[bool, float | None, str]:
+    """از چند URL و چند روش درخواست امتحان می‌کند تا قطع‌شدن زودهنگام کمتر false-negative بدهد."""
     proxy = f"socks5://127.0.0.1:{socks_port}"
     last_err = "no url"
+    # تایم‌اوت‌های جدا: وصل شدن به SOCKS / خواندن پاسخ
+    to = httpx.Timeout(timeout, connect=min(8.0, timeout), read=timeout, write=min(8.0, timeout))
+    limits = httpx.Limits(max_connections=2, max_keepalive_connections=0)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Probe/1.0)",
+        "Accept": "*/*",
+        "Connection": "close",
+    }
     for url in PROBE_URLS:
-        start = time.monotonic()
-        try:
-            async with httpx.AsyncClient(
-                proxy=proxy,
-                timeout=timeout,
-                follow_redirects=True,
-                verify=False,
-            ) as client:
-                resp = await client.get(url)
-                # 204 / 200 / 301 همگی یعنی تونل کار کرده
-                if resp.status_code < 500:
-                    ms = (time.monotonic() - start) * 1000
-                    return True, ms, f"HTTP {resp.status_code}"
-                last_err = f"HTTP {resp.status_code}"
-        except ImportError as e:
-            return False, None, "پکیج socksio نصب نیست — requirements را آپدیت و دوباره دیپلوی کن"
-        except Exception as e:
-            msg = str(e) or type(e).__name__
-            if "socksio" in msg.lower() or "socks" in msg.lower() and "install" in msg.lower():
+        for method in ("GET", "HEAD"):
+            start = time.monotonic()
+            try:
+                async with httpx.AsyncClient(
+                    proxy=proxy,
+                    timeout=to,
+                    follow_redirects=True,
+                    verify=False,
+                    limits=limits,
+                    headers=headers,
+                    http2=False,  # از SOCKS معمولاً HTTP/1.1 پایدارتر است
+                ) as client:
+                    if method == "HEAD":
+                        resp = await client.head(url)
+                    else:
+                        resp = await client.get(url)
+                    # هر پاسخ زیر 500 یعنی تونل ترافیک را رد کرده
+                    if resp.status_code < 500:
+                        ms = (time.monotonic() - start) * 1000
+                        return True, ms, f"{method} {resp.status_code}"
+                    last_err = f"{method} HTTP {resp.status_code}"
+            except ImportError:
                 return False, None, "پکیج socksio نصب نیست — requirements را آپدیت و دوباره دیپلوی کن"
-            last_err = type(e).__name__ + (f": {msg}" if msg else "")
-            continue
+            except Exception as e:
+                msg = str(e) or type(e).__name__
+                low = msg.lower()
+                if "socksio" in low or ("socks" in low and "install" in low):
+                    return False, None, "پکیج socksio نصب نیست — requirements را آپدیت و دوباره دیپلوی کن"
+                # نام کوتاه برای UI
+                name = type(e).__name__
+                if "disconnect" in low or "without sending" in low:
+                    last_err = f"{name}: قطع از سمت سرور"
+                elif "read" in low and "error" in name.lower():
+                    last_err = f"{name}: خواندن پاسخ ناموفق"
+                else:
+                    last_err = f"{name}: {msg[:60]}" if msg else name
+                continue
     return False, None, last_err
 
 
@@ -419,7 +474,7 @@ async def probe_one(raw: str, timeout: float = PROBE_TIMEOUT) -> dict:
             stderr=asyncio.subprocess.PIPE,
         )
         # کمی صبر تا inbound بالا بیاید
-        await asyncio.sleep(0.35)
+        await asyncio.sleep(0.6)
         if proc.returncode is not None:
             err = b""
             try:
