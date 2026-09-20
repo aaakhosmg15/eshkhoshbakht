@@ -219,19 +219,26 @@ function formatConfigDetailsHtml(c) {
 
 function showConfigDetails(c) {
   const title = esc(c.remark || c.protocol || "کانفیگ");
+  const rows = [];
+  const srcName = (c.source_sub_name || "").trim();
+  const orig = (c.orig_remark || "").trim();
+  const cur = (c.remark || "").trim();
+  if (srcName) {
+    rows.push(`<div class="detail-row"><span class="detail-label">اشتراک مبدأ</span><span class="detail-value"><code>${esc(srcName)}</code></span></div>`);
+  } else if (c.source_sub_id) {
+    rows.push(`<div class="detail-row"><span class="detail-label">اشتراک مبدأ</span><span class="detail-value"><code>#${esc(String(c.source_sub_id))}</code></span></div>`);
+  }
+  if (orig) {
+    rows.push(`<div class="detail-row"><span class="detail-label">اسم اصلی (قبل رنیم)</span><span class="detail-value"><code>${esc(orig)}</code></span></div>`);
+  }
+  if (cur) {
+    rows.push(`<div class="detail-row"><span class="detail-label">اسم فعلی</span><span class="detail-value"><code>${esc(cur)}</code></span></div>`);
+  }
   let sourceHtml = "";
-  if (c.source_sub_name || c.orig_remark) {
-    const rows = [];
-    if (c.source_sub_name) {
-      rows.push(`<div class="detail-row"><span class="detail-label">اشتراک مبدأ</span><span class="detail-value"><code>${esc(c.source_sub_name)}</code></span></div>`);
-    }
-    if (c.orig_remark) {
-      rows.push(`<div class="detail-row"><span class="detail-label">اسم اصلی</span><span class="detail-value"><code>${esc(c.orig_remark)}</code></span></div>`);
-    }
-    if (c.orig_remark && c.remark && c.orig_remark !== c.remark) {
-      rows.push(`<div class="detail-row"><span class="detail-label">اسم فعلی</span><span class="detail-value"><code>${esc(c.remark)}</code></span></div>`);
-    }
-    sourceHtml = `<h3 style="margin:16px 0 8px;font-size:0.95rem">📥 منبع اصلی</h3><div class="config-details">${rows.join("")}</div>`;
+  if (rows.length) {
+    sourceHtml = `<h3 style="margin:16px 0 8px;font-size:0.95rem">📥 منبع و نام‌ها</h3><div class="config-details">${rows.join("")}</div>`;
+  } else {
+    sourceHtml = `<p class="muted" style="margin-top:12px">منبع این کانفیگ ثبت نشده (snapshot یا داده قدیمی). با ساخت مجدد اشتراک سفارشی ذخیره می‌شود.</p>`;
   }
   openModal(`
     <h2>🔍 مشخصات کانفیگ</h2>
@@ -640,7 +647,7 @@ function bindSubDetailEvents(sub) {
   });
     app.querySelectorAll("[data-cfg-info]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const cfg = sub.configs.find((x) => x.index === parseInt(btn.dataset.cfgInfo));
+        const cfg = sub.configs.find((x) => Number(x.index) === Number(btn.dataset.cfgInfo));
         if (cfg) showConfigDetails(cfg);
       });
     });
@@ -1116,7 +1123,7 @@ function renderGenDetail(gen) {
     });
     app.querySelectorAll("[data-gen-info]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const cfg = (gen.configs || []).find((x) => x.index === parseInt(btn.dataset.genInfo));
+        const cfg = (gen.configs || []).find((x) => Number(x.index) === Number(btn.dataset.genInfo));
         if (cfg) showConfigDetails(cfg);
       });
     });

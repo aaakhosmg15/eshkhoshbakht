@@ -1075,6 +1075,12 @@ def resolve_generated_configs(gen: dict, persist: bool = True) -> list[str]:
         resolved, new_items = _pinned_first(resolved, new_items)
         items_updated = True
 
+    # پر کردن منبع / اسم اصلی روی items
+    gen["items"] = new_items
+    if backfill_generated_source_meta(gen):
+        new_items = gen["items"]
+        items_updated = True
+
     if persist and resolved and gen.get("id") is not None:
         conn = _conn()
         if items_updated:
@@ -1146,12 +1152,8 @@ def delete_config_from_generated(gen_id: int, user_id: int, idx: int) -> int | N
 
 
 def get_config_source_info(item: dict | None, user_id: int | None = None) -> dict:
-    """اطلاعات منبع یک کانفیگ سفارشی: نام اشتراک مبدأ و اسم اصلی قبل از رنیم.
-
-    خروجی:
-      source_sub_id, source_sub_name, orig_remark, source_index
-    """
-    from config_parser import get_remark, get_host_port
+    """اطلاعات منبع یک کانفیگ سفارشی: نام اشتراک مبدأ و اسم اصلی قبل از رنیم."""
+    from config_parser import get_remark, get_host_port, config_fingerprint
 
     out = {
         "source_sub_id": None,
@@ -1166,31 +1168,35 @@ def get_config_source_info(item: dict | None, user_id: int | None = None) -> dic
         sid = int(item.get("sub_id"))
     except (TypeError, ValueError):
         sid = -1
-    out["source_sub_id"] = sid if sid > 0 else None
+    if sid > 0:
+        out["source_sub_id"] = sid
     out["source_index"] = item.get("index")
-
-    # اسم ذخیره‌شده از قبل
     out["orig_remark"] = (item.get("orig_remark") or "").strip()
     out["source_sub_name"] = (item.get("source_sub_name") or "").strip()
 
-    if user_id is not None and sid and sid > 0:
-        sub = get_sub(sid, user_id)
+    # اگر فیلدها خالی‌اند، از اشتراک منبع بازیابی کن
+    if user_id is not None and sid > 0:
+        sub = get_sub(sid, int(user_id))
         if sub:
             if not out["source_sub_name"]:
-                out["source_sub_name"] = sub.get("name") or ""
-            # اگر orig_remark نداریم، از منبع فعلی با fp/host/index بگیر
+                out["source_sub_name"] = (sub.get("name") or "").strip()
             if not out["orig_remark"]:
                 configs = sub.get("configs") or []
                 raw = None
                 fp = (item.get("fp") or "").strip()
                 if fp:
-                    from config_parser import config_fingerprint
                     matches = [c for c in configs if config_fingerprint(c) == fp]
                     if len(matches) == 1:
                         raw = matches[0]
+                    elif len(matches) > 1:
+                        idx = item.get("index")
+                        if isinstance(idx, int) and 0 <= idx < len(configs) and configs[idx] in matches:
+                            raw = configs[idx]
+                        else:
+                            raw = matches[0]
                 if raw is None:
                     host, port = item.get("host"), item.get("port")
-                    if host and port is not None:
+                    if host is not None and port is not None:
                         try:
                             port_i = int(port)
                         except (TypeError, ValueError):
@@ -1198,7 +1204,7 @@ def get_config_source_info(item: dict | None, user_id: int | None = None) -> dic
                         if port_i is not None:
                             for c in configs:
                                 hp = get_host_port(c)
-                                if hp and hp[0] == str(host) and int(hp[1]) == port_i:
+                                if hp and str(hp[0]) == str(host) and int(hp[1]) == port_i:
                                     raw = c
                                     break
                 if raw is None:
@@ -1206,9 +1212,44 @@ def get_config_source_info(item: dict | None, user_id: int | None = None) -> dic
                     if isinstance(idx, int) and 0 <= idx < len(configs):
                         raw = configs[idx]
                 if raw is not None:
-                    out["orig_remark"] = get_remark(raw) or ""
-
+                    out["orig_remark"] = (get_remark(raw) or "").strip()
     return out
+
+
+def backfill_generated_source_meta(gen: dict) -> bool:
+    """orig_remark و source_sub_name را برای همه items پر و در صورت تغییر ذخیره می‌کند."""
+    items = gen.get("items")
+    if not isinstance(items, list) or not items:
+        return False
+    user_id = gen.get("user_id")
+    if user_id is None:
+        return False
+    changed = False
+    new_items = []
+    for it in items:
+        it = dict(it) if isinstance(it, dict) else {}
+        src = get_config_source_info(it, user_id)
+        if src.get("source_sub_name") and it.get("source_sub_name") != src["source_sub_name"]:
+            it["source_sub_name"] = src["source_sub_name"]
+            changed = True
+        if src.get("orig_remark") and not (it.get("orig_remark") or "").strip():
+            it["orig_remark"] = src["orig_remark"]
+            changed = True
+        # اگر name خالی است ولی remark داریم مشکلی نیست
+        new_items.append(it)
+    if changed and gen.get("id") is not None:
+        conn = _conn()
+        conn.execute(
+            "UPDATE generated_subs SET items=? WHERE id=?",
+            (json.dumps(new_items), gen["id"]),
+        )
+        conn.commit()
+        conn.close()
+        gen["items"] = new_items
+    elif changed:
+        gen["items"] = new_items
+    return changed
+
 
 
 def rename_config_in_generated(gen_id: int, user_id: int, idx: int, new_name: str) -> str | None:

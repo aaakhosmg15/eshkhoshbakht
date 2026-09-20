@@ -1791,25 +1791,36 @@ async def gen_cfg_pick(callback: CallbackQuery):
     configs = storage.resolve_generated_configs(g, persist=True)
     if idx < 0 or idx >= len(configs):
         return await callback.answer("ایندکس نامعتبر.", show_alert=True)
+    try:
+        storage.backfill_generated_source_meta(g)
+    except Exception:
+        pass
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id) or g
+    configs = list(g.get("configs") or configs)
+    if idx >= len(configs):
+        return await callback.answer("ایندکس نامعتبر.", show_alert=True)
     raw = configs[idx]
     flags = storage.get_generated_config_pinned_flags(g)
     is_pinned = bool(flags[idx]) if idx < len(flags) else False
     pin_line = "📌 پین شده\n" if is_pinned else ""
     details = format_config_details_text(raw, html=True)
-    # منبع اصلی (از کدام اشتراک / اسم قبل از رنیم)
     items = g.get("items") or []
     item = items[idx] if isinstance(items, list) and idx < len(items) else None
     src = storage.get_config_source_info(item, callback.from_user.id)
-    src_lines = ""
-    if src.get("source_sub_name") or src.get("orig_remark"):
-        src_lines = "\n\n📥 <b>منبع اصلی</b>\n"
-        if src.get("source_sub_name"):
-            src_lines += f"• <b>اشتراک مبدأ:</b> <code>{escape(src['source_sub_name'])}</code>\n"
-        if src.get("orig_remark"):
-            src_lines += f"• <b>اسم اصلی:</b> <code>{escape(src['orig_remark'])}</code>\n"
-        current = get_remark(raw) or ""
-        if src.get("orig_remark") and current and src["orig_remark"] != current:
-            src_lines += f"• <b>اسم فعلی:</b> <code>{escape(current)}</code>\n"
+    current = get_remark(raw) or ""
+    src_lines = "\n\n📥 <b>منبع و نام‌ها</b>\n"
+    if src.get("source_sub_name"):
+        src_lines += f"• <b>اشتراک مبدأ:</b> <code>{escape(src['source_sub_name'])}</code>\n"
+    elif src.get("source_sub_id"):
+        src_lines += f"• <b>اشتراک مبدأ:</b> <code>#{src['source_sub_id']}</code>\n"
+    else:
+        src_lines += "• <b>اشتراک مبدأ:</b> <i>ثبت نشده</i>\n"
+    if src.get("orig_remark"):
+        src_lines += f"• <b>اسم اصلی (قبل رنیم):</b> <code>{escape(src['orig_remark'])}</code>\n"
+    else:
+        src_lines += "• <b>اسم اصلی:</b> <i>ثبت نشده</i>\n"
+    if current:
+        src_lines += f"• <b>اسم فعلی:</b> <code>{escape(current)}</code>\n"
     text_body = (
         "🔍 <b>مشخصات کانفیگ</b>\n"
         + pin_line
@@ -2639,6 +2650,12 @@ async def pick_config(callback: CallbackQuery, state: FSMContext):
         return await callback.answer("نامعتبر", show_alert=True)
     raw = sub["configs"][idx]
     details = format_config_details_text(raw, html=True)
+    current = get_remark(raw) or ""
+    src_block = (
+        "\n\n📥 <b>منبع و نام‌ها</b>\n"
+        f"• <b>اشتراک مبدأ:</b> <code>{escape(sub['name'])}</code>\n"
+        f"• <b>اسم فعلی:</b> <code>{escape(current)}</code>\n"
+    )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"cfg_rename:{sub_id}:{idx}")],
@@ -2646,7 +2663,7 @@ async def pick_config(callback: CallbackQuery, state: FSMContext):
         ]
     )
     await callback.message.edit_text(
-        f"🔍 <b>مشخصات کانفیگ</b>\n\n{details}",
+        f"🔍 <b>مشخصات کانفیگ</b>\n\n{details}{src_block}",
         reply_markup=kb,
         parse_mode="HTML",
     )
