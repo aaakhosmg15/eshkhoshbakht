@@ -7,14 +7,13 @@ const TG = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.
   ? window.Telegram.WebApp
   : null;
 
-// سبک‌سازی فقط برای مینی‌اپ تلگرام (سایت وب تغییر نمی‌کند)
-(function enableLiteUi() {
-  if (!TG) return;
-  document.documentElement.classList.add("tg-miniapp", "lite-ui");
-  if (document.body) document.body.classList.add("tg-miniapp", "lite-ui");
-  const scene = document.getElementById("scene3d");
-  if (scene) scene.remove();
-})();
+// فقط مینی‌اپ تلگرام — سایت و ربات دست نخورده
+if (TG) {
+  document.documentElement.classList.add("tg-miniapp");
+  if (document.body) document.body.classList.add("tg-miniapp");
+  const _sc = document.getElementById("scene3d");
+  if (_sc) _sc.remove();
+}
 
 const state = {
   tab: "overview",

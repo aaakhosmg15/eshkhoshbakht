@@ -4,13 +4,6 @@
  * منطق app / API / ربات را لمس نمی‌کند.
  */
 (function () {
-  try {
-    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) return;
-    if (navigator.maxTouchPoints > 0) return;
-    if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) return;
-    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
-  } catch (e) { return; }
-
   if (typeof window === "undefined") return;
 
   // فقط دستگاه‌های با نشانگر دقیق (ماوس)

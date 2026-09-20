@@ -1704,14 +1704,10 @@ html.tg-miniapp.modal-open {
   margin-inline-start: 6px;
 }
 
-
-
-
-/* ========== فقط مینی‌اپ تلگرام (سایت دست نخورده) ========== */
+/* ========== فقط مینی‌اپ تلگرام (سایت وب تغییر نمی‌کند) ========== */
 html.tg-miniapp .scene-3d,
 body.tg-miniapp .scene-3d {
   display: none !important;
-  animation: none !important;
   pointer-events: none !important;
 }
 
@@ -1720,32 +1716,32 @@ body.tg-miniapp {
   background: #070b14 !important;
 }
 
-html.tg-miniapp *,
-body.tg-miniapp * {
-  animation: none !important;
-  transition-duration: 0.12s !important;
-  scroll-behavior: auto !important;
-}
-
-html.tg-miniapp .card,
-html.tg-miniapp .modal,
-html.tg-miniapp .login-card,
-html.tg-miniapp .topbar,
-html.tg-miniapp .note-box {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: rgba(18, 24, 38, 0.96) !important;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.04) !important;
-}
-
-html.tg-miniapp .gooey {
-  filter: none !important;
-}
-
+/* انیمیشن و blur سنگین فقط داخل مینی‌اپ خاموش */
+html.tg-miniapp .scene-3d *,
 html.tg-miniapp .space-deep,
 html.tg-miniapp .space-stars,
 html.tg-miniapp .space-nebula,
 html.tg-miniapp .space-blackhole,
 html.tg-miniapp .sun-light-field {
   display: none !important;
+  animation: none !important;
+}
+
+html.tg-miniapp .card,
+html.tg-miniapp .modal,
+html.tg-miniapp .login-card,
+html.tg-miniapp .topbar,
+html.tg-miniapp .note-box,
+html.tg-miniapp .action-bar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(18, 24, 38, 0.97) !important;
+}
+
+html.tg-miniapp .gooey {
+  filter: none !important;
+}
+
+html.tg-miniapp * {
+  scroll-behavior: auto !important;
 }
