@@ -924,17 +924,23 @@ def add_configs_to_generated(
 def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
     """یک آیتم recipe را به کانفیگ خام منبع resolve می‌کند.
 
-    اولویت مچ (ضد جابه‌جایی اسم):
-    1) host:port ذخیره‌شده در item  ← مطمئن‌ترین
-    2) اثرانگشت fp
-    3) ایندکس در منبع
-    بعد اسم سفارشی روی همان raw اعمال می‌شود.
+    اولویت مچ (ضد جابه‌جایی اسم آلمان/انگلیس):
+    1) host:port ذخیره‌شده در item
+    2) اثرانگشت fp (نسخهٔ منبع، بدون اسم سفارشی)
+
+    اگر هیچ‌کدام مچ نشد → None برمی‌گردانیم تا resolve از snapshot
+    همان اسلات استفاده کند. هرگز فقط با index مچ نمی‌کنیم؛ چون با
+    جابه‌جایی ترتیب منبع، اسم یک سرور روی IP سرور دیگر می‌نشیند.
     """
     from config_parser import config_fingerprint, rename_config, get_host_port
 
     try:
         sub_id = int(item["sub_id"])
     except (KeyError, TypeError, ValueError):
+        return None, None
+
+    # sub_id منفی = snapshot خالص، منبع ندارد
+    if sub_id < 0:
         return None, None
 
     sub = subs_cache.get(sub_id)
@@ -945,16 +951,16 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
         subs_cache[sub_id] = sub
 
     configs = sub.get("configs") or []
-    fp = item.get("fp") or ""
+    fp = (item.get("fp") or "").strip()
     idx = item.get("index")
     raw = None
     new_fp = None
 
     def _host_key(c: str):
         hp = get_host_port(c)
-        return (hp[0], hp[1]) if hp else None
+        return (hp[0], int(hp[1])) if hp else None
 
-    # ۱) اولویت با host:port — اسم آلمان فقط روی IP آلمان می‌ماند
+    # ۱) host:port — مطمئن‌ترین هویت اتصال
     host = item.get("host")
     port = item.get("port")
     if host is not None and port is not None:
@@ -965,7 +971,7 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
         if port_i is not None:
             host_matches = [
                 i for i, cand in enumerate(configs)
-                if _host_key(cand) == (host, port_i)
+                if _host_key(cand) == (str(host), port_i)
             ]
             if len(host_matches) == 1:
                 raw = configs[host_matches[0]]
@@ -977,7 +983,7 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
                     raw = configs[host_matches[0]]
                 new_fp = config_fingerprint(raw)
 
-    # ۲) اثرانگشت
+    # ۲) اثرانگشت دقیق
     if raw is None and fp:
         matches = [i for i, cand in enumerate(configs) if config_fingerprint(cand) == fp]
         if len(matches) == 1:
@@ -990,13 +996,20 @@ def _resolve_one_item(item: dict, user_id: int, subs_cache: dict):
                 raw = configs[matches[0]]
             new_fp = config_fingerprint(raw)
 
-    # ۳) ایندکس
-    if raw is None and isinstance(idx, int) and 0 <= idx < len(configs):
-        raw = configs[idx]
-        new_fp = config_fingerprint(raw)
+    # ۳) عمداً fallback به index نداریم — باعث جابه‌جایی اسم می‌شود
 
     if raw is None:
         return None, None
+
+    # ایندکس منبع را به مقدار فعلی به‌روز کن (برای دفعات بعد)
+    if new_fp:
+        try:
+            for i, cand in enumerate(configs):
+                if config_fingerprint(cand) == new_fp:
+                    item["index"] = i
+                    break
+        except Exception:
+            pass
 
     custom_name = (item.get("name") or "").strip()
     if custom_name:
@@ -1024,17 +1037,37 @@ def resolve_generated_configs(gen: dict, persist: bool = True) -> list[str]:
     items_updated = False
     new_items = list(items)
 
+    from config_parser import get_host_port as _ghp
     for i, item in enumerate(items):
+        item = dict(item) if isinstance(item, dict) else {}
+        # اگر host ندارد، از snapshot همان اسلات پر کن (هویت IP)
+        if not item.get("host") and i < len(snapshot):
+            hp = _ghp(snapshot[i])
+            if hp:
+                item["host"] = hp[0]
+                item["port"] = int(hp[1])
+                new_items[i] = item
+                items_updated = True
         raw, new_fp = _resolve_one_item(item, user_id, subs_cache)
         if raw is not None:
             resolved.append(raw)
-            # اگر اثرانگشت عوض شده، در recipe به‌روز کن تا دفعه بعد بهتر پیدا شود
+            upd = dict(item)
+            changed = False
             if new_fp and new_fp != (item.get("fp") or ""):
-                new_items[i] = dict(item)
-                new_items[i]["fp"] = new_fp
+                upd["fp"] = new_fp
+                changed = True
+            # host را از کانفیگ resolve‌شده قفل کن
+            hp = _ghp(raw)
+            if hp:
+                if upd.get("host") != hp[0] or upd.get("port") != int(hp[1]):
+                    upd["host"] = hp[0]
+                    upd["port"] = int(hp[1])
+                    changed = True
+            if changed:
+                new_items[i] = upd
                 items_updated = True
         elif i < len(snapshot):
-            # منبع در دسترس نیست — آخرین نسخه ذخیره‌شده
+            # مچ نشد — snapshot همان اسلات (اسم و IP با هم می‌مانند)
             resolved.append(snapshot[i])
 
     # ترتیب پین را حفظ کن (پین‌شده‌ها بالا)
