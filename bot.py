@@ -45,7 +45,7 @@ from config_parser import (
     rename_config,
 )
 from pinger import ping_configs
-from prober import probe_configs, format_probe_summary, xray_available
+from prober import probe_configs, probe_one, format_probe_summary, xray_available
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -395,6 +395,7 @@ def build_gen_cfg_action_keyboard(
                 InlineKeyboardButton(text="⬆️ بالا", callback_data=f"gen_cfg_up:{gen_id}:{idx}"),
                 InlineKeyboardButton(text="⬇️ پایین", callback_data=f"gen_cfg_down:{gen_id}:{idx}"),
             ],
+            [InlineKeyboardButton(text="🔌 تست واقعی این کانفیگ", callback_data=f"gen_cfg_probe:{gen_id}:{idx}")],
             [InlineKeyboardButton(text=pin_label, callback_data=f"gen_cfg_pin:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"gen_cfg_rename:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="🗑 حذف این کانفیگ", callback_data=f"gen_cfg_del:{gen_id}:{idx}")],
@@ -2602,6 +2603,83 @@ async def probe_generated(callback: CallbackQuery):
         await callback.message.answer(chunk, parse_mode="HTML")
 
 
+
+
+@dp.callback_query(F.data.startswith("cfg_probe:"))
+async def probe_one_sub_cfg(callback: CallbackQuery):
+    """تست واقعی یک کانفیگ از اشتراک عادی."""
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        return await callback.answer("نامعتبر", show_alert=True)
+    sub_id, idx = int(parts[1]), int(parts[2])
+    sub = storage.get_sub(sub_id, callback.from_user.id)
+    if not sub or idx < 0 or idx >= len(sub["configs"]):
+        return await callback.answer("کانفیگ پیدا نشد.", show_alert=True)
+    await callback.answer("در حال تست...")
+    raw = sub["configs"][idx]
+    remark = get_remark(raw) or "(بدون نام)"
+    status = await callback.message.answer(
+        f"🔌 تست واقعی:\n<code>[{escape(get_protocol(raw))}]</code> {escape(remark)}\n\nصبر کن..."
+        , parse_mode="HTML"
+    )
+    r = await probe_one(raw)
+    if r.get("ok"):
+        ms = r.get("ms")
+        body = f"✅ <b>موفق</b>" + (f" — {ms:.0f} ms" if isinstance(ms, (int, float)) else "")
+        try:
+            storage.set_sub_last_successful_ping(sub_id, callback.from_user.id)
+        except Exception:
+            pass
+    elif not r.get("supported", True):
+        body = f"⚠️ <b>غیرقابل‌تست</b>\n{escape(r.get('error') or '')}"
+    else:
+        body = f"❌ <b>ناموفق</b>\n{escape(r.get('error') or 'خطا')}"
+    await status.edit_text(
+        f"🔌 <b>نتیجه تست واقعی</b>\n"
+        f"<code>[{escape(get_protocol(raw))}]</code> {escape(remark)}\n\n{body}",
+        parse_mode="HTML",
+    )
+
+
+@dp.callback_query(F.data.regexp(r"^gen_cfg_probe:\d+:\d+$"))
+async def probe_one_gen_cfg(callback: CallbackQuery):
+    """تست واقعی یک کانفیگ از اشتراک سفارشی."""
+    _, gen_id, idx = callback.data.split(":")
+    gen_id, idx = int(gen_id), int(idx)
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
+    configs = list(g.get("configs") or [])
+    if idx < 0 or idx >= len(configs):
+        return await callback.answer("ایندکس نامعتبر.", show_alert=True)
+    await callback.answer("در حال تست...")
+    raw = configs[idx]
+    remark = get_remark(raw) or "(بدون نام)"
+    status = await callback.message.answer(
+        f"🔌 تست واقعی:\n<code>[{escape(get_protocol(raw))}]</code> {escape(remark)}\n\nصبر کن..."
+        , parse_mode="HTML"
+    )
+    r = await probe_one(raw)
+    if r.get("ok"):
+        ms = r.get("ms")
+        body = f"✅ <b>موفق</b>" + (f" — {ms:.0f} ms" if isinstance(ms, (int, float)) else "")
+        try:
+            storage.set_generated_last_successful_ping(gen_id, callback.from_user.id)
+        except Exception:
+            pass
+    elif not r.get("supported", True):
+        body = f"⚠️ <b>غیرقابل‌تست</b>\n{escape(r.get('error') or '')}"
+    else:
+        body = f"❌ <b>ناموفق</b>\n{escape(r.get('error') or 'خطا')}"
+    await status.edit_text(
+        f"🔌 <b>نتیجه تست واقعی</b>\n"
+        f"اشتراک: {escape(g.get('name') or '')}\n"
+        f"<code>[{escape(get_protocol(raw))}]</code> {escape(remark)}\n\n{body}",
+        parse_mode="HTML",
+    )
+
+
+
 @dp.callback_query(F.data.regexp(r"^sub_delete_dead:\d+$"))
 async def delete_dead_start(callback: CallbackQuery):
     sub_id = int(callback.data.split(":")[1])
@@ -2752,6 +2830,7 @@ async def pick_config(callback: CallbackQuery, state: FSMContext):
     )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="🔌 تست واقعی این کانفیگ", callback_data=f"cfg_probe:{sub_id}:{idx}")],
             [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"cfg_rename:{sub_id}:{idx}")],
             [InlineKeyboardButton(text="« بازگشت", callback_data=f"sub_open:{sub_id}")],
         ]

@@ -240,16 +240,54 @@ function showConfigDetails(c) {
   } else {
     sourceHtml = `<p class="muted" style="margin-top:12px">منبع این کانفیگ ثبت نشده (snapshot یا داده قدیمی). با ساخت مجدد اشتراک سفارشی ذخیره می‌شود.</p>`;
   }
+  const canProbe = typeof c.index === "number" || (c.index !== undefined && c.index !== null);
   openModal(`
     <h2>🔍 مشخصات کانفیگ</h2>
     <p class="muted" style="margin-bottom:12px"><span class="badge">${esc(c.protocol || "")}</span> ${title}</p>
     ${formatConfigDetailsHtml(c)}
     ${sourceHtml}
+    <div id="cfg-probe-result" class="muted" style="margin-top:10px;min-height:1.2em"></div>
     <div class="modal-actions">
+      ${canProbe ? '<button class="btn" id="cfg-probe-one">🔌 تست واقعی این کانفیگ</button>' : ""}
       <button class="btn" id="cfg-detail-close">بستن</button>
     </div>
   `);
   document.getElementById("cfg-detail-close").addEventListener("click", closeModal);
+  const probeBtn = document.getElementById("cfg-probe-one");
+  if (probeBtn) {
+    probeBtn.addEventListener("click", async () => {
+      const box = document.getElementById("cfg-probe-result");
+      probeBtn.disabled = true;
+      if (box) box.textContent = "در حال تست واقعی...";
+      try {
+        let data;
+        if (state.currentGen && state.view && String(state.view).includes("gen")) {
+          data = await api("GET", `/api/generated/${state.currentGen.id}/probe/${c.index}`);
+        } else if (state.currentSub) {
+          data = await api("GET", `/api/subs/${state.currentSub.id}/probe/${c.index}`);
+        } else if (state.currentGen) {
+          data = await api("GET", `/api/generated/${state.currentGen.id}/probe/${c.index}`);
+        } else {
+          throw new Error("مشخص نیست اشتراک مربوط به کدام است");
+        }
+        if (box) {
+          if (data.ok) {
+            box.innerHTML = `✅ <b>موفق</b>${data.ms != null ? " — " + Math.round(data.ms) + " ms" : ""}`;
+          } else if (data.supported === false) {
+            box.innerHTML = `⚠️ غیرقابل‌تست — ${esc(data.error || "")}`;
+          } else {
+            box.innerHTML = `❌ ناموفق — ${esc(data.error || "")}`;
+          }
+        }
+        toast(data.ok ? "تست موفق" : "تست ناموفق", !data.ok);
+      } catch (e) {
+        if (box) box.textContent = e.message || "خطا";
+        toast(e.message || "خطا در تست", true);
+      } finally {
+        probeBtn.disabled = false;
+      }
+    });
+  }
 }
 
 
@@ -582,6 +620,7 @@ function renderSubDetail(sub) {
         ${msBadge}
         <div class="config-actions gooey">
           <button class="btn-sm btn btn-icon" data-cfg-info="${c.index}" title="مشخصات">ℹ️</button>
+          <button class="btn-sm btn btn-icon" data-cfg-probe="${c.index}" title="تست واقعی">🔌</button>
           <button class="btn-sm btn btn-icon" data-rename="${c.index}" title="رنیم">${icon("edit", "icon-sm")}</button>
         </div>
       </div>
@@ -652,6 +691,22 @@ function bindSubDetailEvents(sub) {
       btn.addEventListener("click", () => {
         const cfg = sub.configs.find((x) => Number(x.index) === Number(btn.dataset.cfgInfo));
         if (cfg) showConfigDetails(cfg);
+      });
+    });
+    app.querySelectorAll("[data-cfg-probe]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idx = Number(btn.dataset.cfgProbe);
+        btn.disabled = true;
+        toast("تست واقعی یک کانفیگ...");
+        try {
+          const data = await api("GET", `/api/subs/${sub.id}/probe/${idx}`);
+          if (data.ok) toast(`✅ موفق${data.ms != null ? " — " + Math.round(data.ms) + " ms" : ""}`);
+          else toast(`❌ ${data.error || "ناموفق"}`, true);
+        } catch (e) {
+          toast(e.message || "خطا", true);
+        } finally {
+          btn.disabled = false;
+        }
       });
     });
 }
@@ -1149,6 +1204,7 @@ function renderGenDetail(gen) {
         <button class="btn-sm btn btn-icon" data-gen-up="${c.index}" title="بالا">↑</button>
         <button class="btn-sm btn btn-icon" data-gen-down="${c.index}" title="پایین">↓</button>
         <button class="btn-sm btn btn-icon" data-gen-info="${c.index}" title="مشخصات">ℹ️</button>
+        <button class="btn-sm btn btn-icon" data-gen-probe="${c.index}" title="تست واقعی">🔌</button>
         <button class="btn-sm btn btn-icon" data-gen-rename="${c.index}" title="تغییر اسم">${icon("edit", "icon-sm")}</button>
         <button class="btn-sm btn btn-danger btn-icon" data-gen-del="${c.index}" title="حذف">${icon("trash", "icon-sm")}</button>
       </div>
@@ -1185,6 +1241,22 @@ function renderGenDetail(gen) {
       btn.addEventListener("click", () => {
         const cfg = (gen.configs || []).find((x) => Number(x.index) === Number(btn.dataset.genInfo));
         if (cfg) showConfigDetails(cfg);
+      });
+    });
+    app.querySelectorAll("[data-gen-probe]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idx = Number(btn.dataset.genProbe);
+        btn.disabled = true;
+        toast("تست واقعی یک کانفیگ...");
+        try {
+          const data = await api("GET", `/api/generated/${gen.id}/probe/${idx}`);
+          if (data.ok) toast(`✅ موفق${data.ms != null ? " — " + Math.round(data.ms) + " ms" : ""}`);
+          else toast(`❌ ${data.error || "ناموفق"}`, true);
+        } catch (e) {
+          toast(e.message || "خطا", true);
+        } finally {
+          btn.disabled = false;
+        }
       });
     });
     app.querySelectorAll("[data-gen-del]").forEach((btn) => {
