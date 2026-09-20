@@ -1144,6 +1144,73 @@ def delete_config_from_generated(gen_id: int, user_id: int, idx: int) -> int | N
     return len(configs)
 
 
+
+def get_config_source_info(item: dict | None, user_id: int | None = None) -> dict:
+    """اطلاعات منبع یک کانفیگ سفارشی: نام اشتراک مبدأ و اسم اصلی قبل از رنیم.
+
+    خروجی:
+      source_sub_id, source_sub_name, orig_remark, source_index
+    """
+    from config_parser import get_remark, get_host_port
+
+    out = {
+        "source_sub_id": None,
+        "source_sub_name": "",
+        "orig_remark": "",
+        "source_index": None,
+    }
+    if not isinstance(item, dict):
+        return out
+
+    try:
+        sid = int(item.get("sub_id"))
+    except (TypeError, ValueError):
+        sid = -1
+    out["source_sub_id"] = sid if sid > 0 else None
+    out["source_index"] = item.get("index")
+
+    # اسم ذخیره‌شده از قبل
+    out["orig_remark"] = (item.get("orig_remark") or "").strip()
+    out["source_sub_name"] = (item.get("source_sub_name") or "").strip()
+
+    if user_id is not None and sid and sid > 0:
+        sub = get_sub(sid, user_id)
+        if sub:
+            if not out["source_sub_name"]:
+                out["source_sub_name"] = sub.get("name") or ""
+            # اگر orig_remark نداریم، از منبع فعلی با fp/host/index بگیر
+            if not out["orig_remark"]:
+                configs = sub.get("configs") or []
+                raw = None
+                fp = (item.get("fp") or "").strip()
+                if fp:
+                    from config_parser import config_fingerprint
+                    matches = [c for c in configs if config_fingerprint(c) == fp]
+                    if len(matches) == 1:
+                        raw = matches[0]
+                if raw is None:
+                    host, port = item.get("host"), item.get("port")
+                    if host and port is not None:
+                        try:
+                            port_i = int(port)
+                        except (TypeError, ValueError):
+                            port_i = None
+                        if port_i is not None:
+                            for c in configs:
+                                hp = get_host_port(c)
+                                if hp and hp[0] == str(host) and int(hp[1]) == port_i:
+                                    raw = c
+                                    break
+                if raw is None:
+                    idx = item.get("index")
+                    if isinstance(idx, int) and 0 <= idx < len(configs):
+                        raw = configs[idx]
+                if raw is not None:
+                    out["orig_remark"] = get_remark(raw) or ""
+
+    return out
+
+
 def rename_config_in_generated(gen_id: int, user_id: int, idx: int, new_name: str) -> str | None:
     """رنیم یک کانفیگ داخل اشتراک سفارشی. remark جدید یا None در صورت خطا."""
     from config_parser import rename_config, get_remark
@@ -1160,15 +1227,29 @@ def rename_config_in_generated(gen_id: int, user_id: int, idx: int, new_name: st
     if idx < 0 or idx >= len(configs):
         conn.close()
         return None
-    configs[idx] = rename_config(configs[idx], new_name)
+
     items = None
     if row[1]:
         try:
             items = json.loads(row[1])
         except Exception:
             items = None
+
+    old_remark = get_remark(configs[idx]) or ""
+    configs[idx] = rename_config(configs[idx], new_name)
+
     if isinstance(items, list) and idx < len(items) and isinstance(items[idx], dict):
-        items[idx]["name"] = new_name
+        it = dict(items[idx])
+        # اسم اصلی (قبل از هر رنیم سفارشی) را یک‌بار نگه دار
+        if not (it.get("orig_remark") or "").strip():
+            prev = (it.get("name") or "").strip() or old_remark
+            if prev and prev != new_name:
+                it["orig_remark"] = prev
+            elif old_remark and old_remark != new_name:
+                it["orig_remark"] = old_remark
+        it["name"] = new_name
+        items[idx] = it
+
     conn.execute(
         "UPDATE generated_subs SET configs=?, items=? WHERE id=? AND user_id=?",
         (json.dumps(configs), json.dumps(items) if items is not None else None, gen_id, user_id),
@@ -1177,10 +1258,6 @@ def rename_config_in_generated(gen_id: int, user_id: int, idx: int, new_name: st
     conn.close()
     return get_remark(configs[idx]) or new_name
 
-
-# ---------- بک‌آپ / بازیابی (جابه‌جایی سرور) ----------
-
-BACKUP_VERSION = 1
 
 
 def export_full_backup() -> dict:

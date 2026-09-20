@@ -1182,6 +1182,8 @@ async def select_done(callback: CallbackQuery, state: FSMContext):
             "index": idx,
             "fp": config_fingerprint(raw),
             "name": "",
+            "orig_remark": get_remark(raw) or "",
+            "source_sub_name": sub.get("name") or "",
         }
         _hp = get_host_port(raw)
         if _hp:
@@ -1504,8 +1506,8 @@ async def src_done(callback: CallbackQuery, state: FSMContext):
         sub = storage.get_sub(sid, callback.from_user.id)
         if not sub:
             continue
-        for raw in sub["configs"]:
-            pool.append({"raw": raw, "source_name": sub["name"], "sub_id": sid})
+        for i, raw in enumerate(sub["configs"]):
+            pool.append({"raw": raw, "source_name": sub["name"], "sub_id": sid, "index": i})
 
     if not pool:
         return await callback.answer("این منابع کانفیگی ندارن.", show_alert=True)
@@ -1609,6 +1611,8 @@ async def msel_done(callback: CallbackQuery, state: FSMContext):
                 "index": it.get("index", 0),
                 "fp": config_fingerprint(it["raw"]),
                 "name": "",
+                "orig_remark": get_remark(it["raw"]) or "",
+                "source_sub_name": (it.get("source_name") or it.get("sub_name") or ""),
             }
             _hp = get_host_port(it["raw"])
             if _hp:
@@ -1640,6 +1644,8 @@ async def msel_done(callback: CallbackQuery, state: FSMContext):
             "index": it.get("index", 0),
             "fp": config_fingerprint(it["raw"]),
             "name": "",
+            "orig_remark": get_remark(it["raw"]) or "",
+            "source_sub_name": (it.get("source_name") or it.get("sub_name") or ""),
         }
         _hp = get_host_port(it["raw"])
         if _hp:
@@ -1790,11 +1796,26 @@ async def gen_cfg_pick(callback: CallbackQuery):
     is_pinned = bool(flags[idx]) if idx < len(flags) else False
     pin_line = "📌 پین شده\n" if is_pinned else ""
     details = format_config_details_text(raw, html=True)
+    # منبع اصلی (از کدام اشتراک / اسم قبل از رنیم)
+    items = g.get("items") or []
+    item = items[idx] if isinstance(items, list) and idx < len(items) else None
+    src = storage.get_config_source_info(item, callback.from_user.id)
+    src_lines = ""
+    if src.get("source_sub_name") or src.get("orig_remark"):
+        src_lines = "\n\n📥 <b>منبع اصلی</b>\n"
+        if src.get("source_sub_name"):
+            src_lines += f"• <b>اشتراک مبدأ:</b> <code>{escape(src['source_sub_name'])}</code>\n"
+        if src.get("orig_remark"):
+            src_lines += f"• <b>اسم اصلی:</b> <code>{escape(src['orig_remark'])}</code>\n"
+        current = get_remark(raw) or ""
+        if src.get("orig_remark") and current and src["orig_remark"] != current:
+            src_lines += f"• <b>اسم فعلی:</b> <code>{escape(current)}</code>\n"
     text_body = (
         "🔍 <b>مشخصات کانفیگ</b>\n"
         + pin_line
-        + f"اشتراک: {escape(g['name'])}\n\n"
+        + f"اشتراک سفارشی: {escape(g['name'])}\n\n"
         + details
+        + src_lines
     )
     await callback.message.edit_text(
         text_body,

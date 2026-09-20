@@ -219,10 +219,25 @@ function formatConfigDetailsHtml(c) {
 
 function showConfigDetails(c) {
   const title = esc(c.remark || c.protocol || "کانفیگ");
+  let sourceHtml = "";
+  if (c.source_sub_name || c.orig_remark) {
+    const rows = [];
+    if (c.source_sub_name) {
+      rows.push(`<div class="detail-row"><span class="detail-label">اشتراک مبدأ</span><span class="detail-value"><code>${esc(c.source_sub_name)}</code></span></div>`);
+    }
+    if (c.orig_remark) {
+      rows.push(`<div class="detail-row"><span class="detail-label">اسم اصلی</span><span class="detail-value"><code>${esc(c.orig_remark)}</code></span></div>`);
+    }
+    if (c.orig_remark && c.remark && c.orig_remark !== c.remark) {
+      rows.push(`<div class="detail-row"><span class="detail-label">اسم فعلی</span><span class="detail-value"><code>${esc(c.remark)}</code></span></div>`);
+    }
+    sourceHtml = `<h3 style="margin:16px 0 8px;font-size:0.95rem">📥 منبع اصلی</h3><div class="config-details">${rows.join("")}</div>`;
+  }
   openModal(`
     <h2>🔍 مشخصات کانفیگ</h2>
     <p class="muted" style="margin-bottom:12px"><span class="badge">${esc(c.protocol || "")}</span> ${title}</p>
     ${formatConfigDetailsHtml(c)}
+    ${sourceHtml}
     <div class="modal-actions">
       <button class="btn" id="cfg-detail-close">بستن</button>
     </div>

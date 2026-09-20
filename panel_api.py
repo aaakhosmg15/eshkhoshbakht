@@ -79,7 +79,18 @@ def _gen_configs_payload(gen: dict, live: list[str]) -> list[dict]:
         flags = storage.get_generated_config_pinned_flags(gen)
     if len(flags) != len(live):
         flags = [False] * len(live)
-    return [_config_summary(i, c, flags[i] if i < len(flags) else False) for i, c in enumerate(live)]
+    items = gen.get("items") or []
+    user_id = gen.get("user_id")
+    out = []
+    for i, c in enumerate(live):
+        summary = _config_summary(i, c, flags[i] if i < len(flags) else False)
+        item = items[i] if isinstance(items, list) and i < len(items) else None
+        src = storage.get_config_source_info(item, user_id)
+        summary["source_sub_name"] = src.get("source_sub_name") or ""
+        summary["orig_remark"] = src.get("orig_remark") or ""
+        summary["source_sub_id"] = src.get("source_sub_id")
+        out.append(summary)
+    return out
 
 
 def _sub_summary(sub: dict) -> dict:
@@ -364,6 +375,8 @@ async def api_build_custom(request: web.Request) -> web.Response:
             "index": idx,
             "fp": config_fingerprint(src_raw),
             "name": custom_name,
+            "orig_remark": get_remark(src_raw) or "",
+            "source_sub_name": sub.get("name") or "",
         }
         _hp = get_host_port(src_raw)
         if _hp:
@@ -472,6 +485,8 @@ async def api_add_to_generated(request: web.Request) -> web.Response:
             "index": idx,
             "fp": config_fingerprint(src_raw),
             "name": custom_name,
+            "orig_remark": get_remark(src_raw) or "",
+            "source_sub_name": sub.get("name") or "",
         }
         _hp = get_host_port(src_raw)
         if _hp:
