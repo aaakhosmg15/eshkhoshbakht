@@ -352,14 +352,22 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def build_gen_configs_keyboard(gen_id: int, configs: list[str], page: int = 0) -> InlineKeyboardMarkup:
+def build_gen_configs_keyboard(
+    gen_id: int,
+    configs: list[str],
+    page: int = 0,
+    pinned_flags: list[bool] | None = None,
+) -> InlineKeyboardMarkup:
     start = page * PAGE_SIZE
     chunk = configs[start : start + PAGE_SIZE]
     rows = []
     for i, raw in enumerate(chunk, start=start):
         remark = get_remark(raw) or "(بدون نام)"
         proto = get_protocol(raw)
-        label = f"{i + 1}. [{proto}] {remark[:28]}"
+        pin = ""
+        if pinned_flags is not None and i < len(pinned_flags) and pinned_flags[i]:
+            pin = "📌 "
+        label = f"{pin}{i + 1}. [{proto}] {remark[:26]}"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"gen_cfg:{gen_id}:{i}")])
     nav = []
     if start > 0:
@@ -372,13 +380,17 @@ def build_gen_configs_keyboard(gen_id: int, configs: list[str], page: int = 0) -
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def build_gen_cfg_action_keyboard(gen_id: int, idx: int) -> InlineKeyboardMarkup:
+def build_gen_cfg_action_keyboard(
+    gen_id: int, idx: int, is_pinned: bool = False
+) -> InlineKeyboardMarkup:
+    pin_label = "📌 برداشتن پین" if is_pinned else "📌 پین کردن"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="⬆️ بالا", callback_data=f"gen_cfg_up:{gen_id}:{idx}"),
                 InlineKeyboardButton(text="⬇️ پایین", callback_data=f"gen_cfg_down:{gen_id}:{idx}"),
             ],
+            [InlineKeyboardButton(text=pin_label, callback_data=f"gen_cfg_pin:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="✏️ تغییر اسم", callback_data=f"gen_cfg_rename:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="🗑 حذف این کانفیگ", callback_data=f"gen_cfg_del:{gen_id}:{idx}")],
             [InlineKeyboardButton(text="« بازگشت به لیست کانفیگ‌ها", callback_data=f"gen_cfgs:{gen_id}:0")],
@@ -2731,6 +2743,47 @@ async def backup_restore_need_doc(message: Message, state: FSMContext):
     if await bail_if_menu_button(message, state):
         return
     await message.answer("لطفاً فایل بک‌آپ را به صورت سند (Document) بفرست، نه متن.")
+
+
+
+
+@dp.errors()
+async def global_error_handler(event):
+    """هر خطای هندلر را لاگ می‌کند و به کاربر پیام می‌دهد تا دکمه گیر نکند."""
+    exception = getattr(event, "exception", None) or getattr(event, "error", None)
+    logger.exception("Handler error: %s", exception)
+    try:
+        update = getattr(event, "update", None)
+        cq = None
+        msg = None
+        if update is not None:
+            cq = getattr(update, "callback_query", None)
+            msg = getattr(update, "message", None)
+        if cq is not None:
+            try:
+                await cq.answer("خطایی رخ داد. دوباره بزن یا /start", show_alert=True)
+            except Exception:
+                pass
+        elif msg is not None:
+            try:
+                await msg.answer("یک خطا رخ داد. دوباره تلاش کن یا /start بزن.")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return True
+
+
+@dp.callback_query()
+async def unhandled_callback(callback: CallbackQuery, state: FSMContext):
+    """اگر دکمه‌ای هندلر نداشت (مثلاً state منقضی شده) کاربر را راهنمایی کن."""
+    data = callback.data or ""
+    # فقط وقتی هیچ هندلر دیگری match نکرده
+    logger.warning("Unhandled callback: %s state=%s", data, await state.get_state())
+    await callback.answer(
+        "این دکمه منقضی شده یا در دسترس نیست. از منو دوباره وارد شو.",
+        show_alert=True,
+    )
 
 
 # ===================== Main =====================
