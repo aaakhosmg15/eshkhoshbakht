@@ -1,6 +1,7 @@
 """
 صفحات HTML پنل وب: لاگین (تلگرام + یوزرنیم/پسورد) و شل اصلی SPA.
 """
+import os
 from pathlib import Path
 from html import escape as html_escape
 from urllib.parse import quote, unquote
@@ -17,51 +18,45 @@ _LOGO_SVG = """<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke
 </svg>"""
 
 
-def _login_html(error: str = "") -> str:
-    bot_username = auth.BOT_USERNAME
-    if bot_username:
-        widget = f"""
-        <script async src="https://telegram.org/js/telegram-widget.js?22"
-          data-telegram-login="{bot_username}"
-          data-size="large"
-          data-radius="12"
-          data-auth-url="/panel/auth/callback"
-          data-request-access="write"></script>
-        """
-    else:
-        widget = "<p class='muted'>یوزرنیم ربات هنوز مشخص نشده؛ چند لحظه صبر کن و صفحه را رفرش کن.</p>"
-
+def _login_html(error: str = "", telegram_auth_url: str | None = None) -> str:
     disabled_notice = ""
     if not auth.panel_enabled():
         disabled_notice = (
             "<p class='warn'>پنل غیرفعال است. یا <code>ADMIN_IDS</code> را ست کن "
-            "یا <code>PANEL_USER</code> و <code>PANEL_PASSWORD</code> را در Railway تنظیم کن.</p>"
+            "یا <code>PANEL_USER</code> و <code>PANEL_PASSWORD</code> را تنظیم کن "
+            "یا <code>TELEGRAM_CLIENT_ID</code> و <code>TELEGRAM_CLIENT_SECRET</code> را از BotFather اضافه کن.</p>"
         )
 
     error_html = f"<p class='error-msg'>{html_escape(error)}</p>" if error else ""
 
+    # دکمه ورود با تلگرام (سیستم جدید OpenID Connect)
+    tg_button = ""
+    if telegram_auth_url:
+        tg_button = f"""
+    <p class="tagline">ورود امن با اکانت تلگرام ادمین</p>
+    <a href="{html_escape(telegram_auth_url)}" class="btn login-btn tg-login-btn" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin:12px 0 8px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.54 8.2l-1.9 8.96c-.14.64-.52.8-1.05.5l-2.9-2.14-1.4 1.35c-.15.15-.28.28-.57.28l.2-2.93 5.36-4.84c.23-.21-.05-.32-.36-.12l-6.63 4.17-2.86-.9c-.62-.19-.63-.62.13-.92l11.17-4.3c.52-.2.97.12.8.9z"/></svg>
+      ورود با تلگرام
+    </a>
+        """
+    elif auth.ADMIN_IDS and not auth.telegram_oidc_enabled():
+        tg_button = """
+    <p class="muted" style="margin:12px 0">برای فعال‌سازی ورود با تلگرام، متغیرهای <code>TELEGRAM_CLIENT_ID</code> و <code>TELEGRAM_CLIENT_SECRET</code> را از بخش Login Widget در BotFather ست کن.</p>
+        """
+
     password_form = ""
     if auth.password_login_enabled():
-        password_form = """
-    <div class="divider"><span>یا</span></div>
+        divider = '<div class="divider"><span>یا</span></div>' if tg_button else ""
+        password_form = f"""
+    {divider}
     <form class="login-form" method="post" action="/panel/auth/password" autocomplete="on">
       <label for="username">یوزرنیم</label>
       <input type="text" id="username" name="username" required autocomplete="username" dir="ltr"/>
       <label for="password">پسورد</label>
       <input type="password" id="password" name="password" required autocomplete="current-password" dir="ltr"/>
-      <button type="submit" class="btn login-btn">ورود</button>
+      <button type="submit" class="btn login-btn">ورود با یوزرنیم</button>
     </form>
         """
-
-    if auth.ADMIN_IDS:
-        tg_section = f"""
-    <p class="tagline">ورود امن با اکانت تلگرام ادمین</p>
-    <div class="widget-wrap">{widget}</div>
-        """
-    elif auth.password_login_enabled():
-        tg_section = '<p class="tagline">با یوزرنیم و پسورد وارد شو</p>'
-    else:
-        tg_section = f'<div class="widget-wrap">{widget}</div>'
 
     return f"""<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -74,7 +69,7 @@ def _login_html(error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260919pin"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260920oidc"/>
 </head>
 <body class="login-body">
 <!-- Solar System 3D background (visual only) -->
@@ -110,13 +105,13 @@ def _login_html(error: str = "") -> str:
     <div class="login-logo">{_LOGO_SVG}</div>
     <h1>خوشبخت</h1>
     <p class="tagline" style="margin-bottom:4px">پنل مدیریت تونل و اشتراک</p>
-    {tg_section}
+    {tg_button}
     {error_html}
     {password_form}
     {disabled_notice}
   </div>
-<script src="/panel/static/scene3d.js?v=20260919pin"></script>
-<script src="/panel/static/cursor.js?v=20260919pin"></script>
+<script src="/panel/static/scene3d.js?v=20260920oidc"></script>
+<script src="/panel/static/cursor.js?v=20260920oidc"></script>
 </body>
 </html>"""
 
@@ -135,12 +130,64 @@ def _set_session_cookie(resp: web.StreamResponse, session_id: str) -> None:
 
 async def handle_login_page(request: web.Request) -> web.Response:
     err = unquote(request.query.get("error", "") or "")
-    return web.Response(text=_login_html(error=err), content_type="text/html", charset="utf-8")
+
+    # ساخت آدرس ورود تلگرام (OIDC)
+    telegram_auth_url = None
+    if auth.telegram_oidc_enabled():
+        # از هدر Host یا BASE_URL استفاده می‌کنیم
+        host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or ""
+        proto = request.headers.get("X-Forwarded-Proto") or request.scheme or "https"
+        if host:
+            redirect_uri = f"{proto}://{host}/panel/auth/callback"
+        else:
+            base = (os.environ.get("BASE_URL") or "").rstrip("/")
+            redirect_uri = f"{base}/panel/auth/callback" if base else "/panel/auth/callback"
+        telegram_auth_url = auth.build_telegram_auth_url(redirect_uri)
+
+    return web.Response(
+        text=_login_html(error=err, telegram_auth_url=telegram_auth_url),
+        content_type="text/html",
+        charset="utf-8",
+    )
 
 
 async def handle_auth_callback(request: web.Request) -> web.Response:
-    data = dict(request.query)
-    user_id = auth.verify_telegram_login(data)
+    """
+    کالبک سیستم جدید OpenID Connect تلگرام.
+    پارامترهای برگشتی: code, state (و در صورت خطا error)
+    """
+    query = request.query
+    error = query.get("error")
+    if error:
+        return web.HTTPFound("/panel/login?error=" + quote(f"خطای تلگرام: {error}"))
+
+    code = query.get("code")
+    state = query.get("state")
+
+    if not code:
+        # سازگاری با ویجت قدیمی (اگر هنوز کسی از آن استفاده کند)
+        data = dict(query)
+        user_id = auth.verify_telegram_login(data)
+        if user_id is not None:
+            session_id = auth.create_session(user_id)
+            resp = web.HTTPFound("/panel")
+            _set_session_cookie(resp, session_id)
+            return resp
+        return web.HTTPFound("/panel/login?error=" + quote("کد ورود دریافت نشد"))
+
+    if not auth.consume_oidc_state(state):
+        return web.HTTPFound("/panel/login?error=" + quote("درخواست منقضی یا نامعتبر است. دوباره تلاش کن."))
+
+    # ساخت redirect_uri دقیق (باید با آنچه در auth URL فرستاده شد یکی باشد)
+    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or ""
+    proto = request.headers.get("X-Forwarded-Proto") or request.scheme or "https"
+    if host:
+        redirect_uri = f"{proto}://{host}/panel/auth/callback"
+    else:
+        base = (os.environ.get("BASE_URL") or "").rstrip("/")
+        redirect_uri = f"{base}/panel/auth/callback" if base else "/panel/auth/callback"
+
+    user_id = await auth.exchange_code_and_verify(code, redirect_uri)
     if user_id is None:
         return web.Response(
             text=(
@@ -150,7 +197,7 @@ async def handle_auth_callback(request: web.Request) -> web.Response:
                 "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}"
                 "a{color:#d4af37}</style></head><body><div>"
                 "<h2 style='color:#f07178'>ورود ناموفق بود</h2>"
-                "<p style='color:#6b8299'>دادهٔ ورود نامعتبر است یا این آیدی در ADMIN_IDS نیست.</p>"
+                "<p style='color:#6b8299'>توکن نامعتبر است یا این آیدی در ADMIN_IDS نیست.</p>"
                 "<a href='/panel/login'>برگشت به صفحهٔ ورود</a></div></body></html>"
             ),
             content_type="text/html",
