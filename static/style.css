@@ -1703,3 +1703,78 @@ html.tg-miniapp.modal-open {
   direction: ltr;
   margin-inline-start: 6px;
 }
+
+
+/* ========== حالت سبک: مینی‌اپ تلگرام / موبایل ========== */
+html.lite-ui .scene-3d,
+body.lite-ui .scene-3d,
+html.tg-miniapp .scene-3d,
+body.tg-miniapp .scene-3d {
+  display: none !important;
+  animation: none !important;
+  pointer-events: none !important;
+}
+
+html.lite-ui,
+body.lite-ui,
+html.tg-miniapp,
+body.tg-miniapp {
+  background: #070b14 !important;
+}
+
+html.lite-ui *,
+html.tg-miniapp *,
+body.lite-ui *,
+body.tg-miniapp * {
+  animation: none !important;
+  transition-duration: 0.12s !important;
+  scroll-behavior: auto !important;
+}
+
+html.lite-ui .card,
+html.tg-miniapp .card,
+html.lite-ui .modal,
+html.tg-miniapp .modal,
+html.lite-ui .login-card,
+html.tg-miniapp .login-card,
+html.lite-ui .topbar,
+html.tg-miniapp .topbar,
+html.lite-ui .note-box,
+html.tg-miniapp .note-box {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(18, 24, 38, 0.96) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) !important;
+}
+
+html.lite-ui .gooey,
+html.tg-miniapp .gooey {
+  filter: none !important;
+}
+
+html.lite-ui body,
+html.tg-miniapp body,
+body.lite-ui,
+body.tg-miniapp {
+  font-family: "Vazirmatn", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+/* کاهش لایه و رنگ‌های سنگین */
+html.tg-miniapp .space-deep,
+html.tg-miniapp .space-stars,
+html.tg-miniapp .space-nebula,
+html.tg-miniapp .space-blackhole,
+html.tg-miniapp .sun-light-field {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .scene-3d {
+    display: none !important;
+  }
+  .card, .modal, .login-card, .topbar {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .gooey { filter: none !important; }
+}

@@ -8,10 +8,24 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <title>پنل خوشبخت</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function(){
+  try {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var lite = !!(tg && tg.initData);
+    if (!lite && navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900) lite = true;
+    if (!lite && window.matchMedia && window.matchMedia("(max-width:900px)").matches) lite = true;
+    if (lite) {
+      document.documentElement.classList.add("lite-ui");
+      if (tg && tg.initData) document.documentElement.classList.add("tg-miniapp");
+    }
+  } catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/panel/static/style.css?v=20260919pin"/>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/panel/static/style.css?v=20260920lite"/>
 </head>
 <body>
 
@@ -65,8 +79,8 @@
 </div>
 <div class="toast" id="toast"></div>
 <script src="/panel/static/vendor/qrcode.js"></script>
-<script src="/panel/static/app.js?v=20260920probe1"></script>
-<script src="/panel/static/scene3d.js?v=20260919pin"></script>
-<script src="/panel/static/cursor.js?v=20260919pin"></script>
+<script src="/panel/static/app.js?v=20260920lite"></script>
+<script src="/panel/static/scene3d.js?v=20260920lite"></script>
+<script src="/panel/static/cursor.js?v=20260920lite"></script>
 </body>
 </html>
