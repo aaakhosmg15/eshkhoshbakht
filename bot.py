@@ -45,6 +45,7 @@ from config_parser import (
     rename_config,
 )
 from pinger import ping_configs
+from prober import probe_configs, format_probe_summary, xray_available
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ BTN_NOTE_SKIP = "بدون یادداشت"
 BTN_BACK = "« بازگشت به اشتراک‌ها"
 BTN_REFRESH = "🔄 بروزرسانی"
 BTN_PING = "📶 پینگ کانفیگ‌ها"
+BTN_PROBE = "🔌 تست واقعی اتصال"
 BTN_OPEN_PANEL = "🌐 باز کردن پنل"
 BTN_EDIT_NOTE = "📝 یادداشت"
 BTN_DELETE = "🗑 حذف اشتراک"
@@ -339,6 +341,7 @@ def build_gen_detail_keyboard(gen_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 مدیریت کانفیگ‌ها", callback_data=f"gen_cfgs:{gen_id}:0")],
             [InlineKeyboardButton(text="📶 پینگ کانفیگ‌ها", callback_data=f"gen_ping:{gen_id}")],
+            [InlineKeyboardButton(text="🔌 تست واقعی اتصال", callback_data=f"gen_probe:{gen_id}")],
             [InlineKeyboardButton(text="📱 نمایش QR Code", callback_data=f"gen_qr:{gen_id}")],
             [InlineKeyboardButton(text="➕ افزودن کانفیگ از یک اشتراک دیگه", callback_data=f"gen_add:{gen_id}")],
             [
@@ -423,6 +426,9 @@ def build_configs_keyboard(sub_id: int, configs: list[str], page: int = 0) -> In
             InlineKeyboardButton(text=BTN_PING, callback_data=f"sub_ping:{sub_id}"),
             InlineKeyboardButton(text=BTN_DELETE_DEAD, callback_data=f"sub_delete_dead:{sub_id}"),
         ]
+    )
+    rows.append(
+        [InlineKeyboardButton(text=BTN_PROBE, callback_data=f"sub_probe:{sub_id}")]
     )
     rows.append(
         [
@@ -2453,6 +2459,47 @@ def _format_ping_lines(sub_name: str, configs: list[str], results: dict[int, flo
     return chunks
 
 
+
+
+def _format_probe_lines(title: str, configs: list[str], results: dict[int, dict]) -> list[str]:
+    """پیام‌های HTML نتیجه تست واقعی."""
+    lines = [f"🔌 <b>تست واقعی:</b> {escape(title)}\n"]
+    alive = dead = unsup = 0
+    for i, raw in enumerate(configs):
+        r = results.get(i) or {}
+        remark = escape(get_remark(raw) or r.get("remark") or "(بدون نام)")
+        proto = escape(get_protocol(raw) or r.get("protocol") or "?")
+        if not r.get("supported", True):
+            unsup += 1
+            status = f"⚠️ {escape((r.get('error') or 'پشتیبانی نمی‌شود')[:40])}"
+        elif r.get("ok"):
+            alive += 1
+            ms = r.get("ms")
+            status = f"✅ {ms:.0f} ms" if isinstance(ms, (int, float)) else "✅"
+        else:
+            dead += 1
+            err = escape((r.get("error") or "ناموفق")[:40])
+            status = f"❌ {err}"
+        lines.append(f"{i + 1}. <code>[{proto}]</code> {remark}\n    {status}")
+    summary = f"\n\n📊 زنده: <b>{alive}</b> · مرده: <b>{dead}</b>"
+    if unsup:
+        summary += f" · غیرقابل‌تست: <b>{unsup}</b>"
+    if not xray_available():
+        summary += "\n\n⚠️ هسته Xray روی سرور نصب نیست — Dockerfile جدید را دیپلوی کن."
+    lines.append(summary)
+    # chunk by length
+    chunks, cur = [], ""
+    for line in lines:
+        if len(cur) + len(line) + 1 > 3500:
+            chunks.append(cur)
+            cur = line
+        else:
+            cur = (cur + "\n" + line) if cur else line
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 @dp.callback_query(F.data.startswith("sub_ping:"))
 async def ping_sub(callback: CallbackQuery):
     sub_id = int(callback.data.split(":")[1])
@@ -2507,6 +2554,53 @@ async def ping_generated(callback: CallbackQuery):
 
 
 # ---------- حذف کانفیگ‌های مرده ----------
+
+
+
+@dp.callback_query(F.data.startswith("sub_probe:"))
+async def probe_sub(callback: CallbackQuery):
+    sub_id = int(callback.data.split(":")[1])
+    sub = storage.get_sub(sub_id, callback.from_user.id)
+    if not sub:
+        return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
+    await callback.answer()
+    n = len(sub["configs"])
+    status = await callback.message.answer(
+        f"🔌 در حال تست واقعی {n} کانفیگ...\n"
+        f"(ممکن است تا {max(30, n * 4)} ثانیه طول بکشد)"
+    )
+    results = await probe_configs(list(sub["configs"]))
+    if any(r.get("ok") for r in results.values()):
+        storage.set_sub_last_successful_ping(sub_id, callback.from_user.id)
+    chunks = _format_probe_lines(sub["name"], sub["configs"], results)
+    await status.edit_text(chunks[0], parse_mode="HTML")
+    for chunk in chunks[1:]:
+        await callback.message.answer(chunk, parse_mode="HTML")
+
+
+@dp.callback_query(F.data.regexp(r"^gen_probe:\d+$"))
+async def probe_generated(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[1])
+    g = storage.get_generated_by_id(gen_id, callback.from_user.id)
+    if not g:
+        return await callback.answer("این اشتراک پیدا نشد.", show_alert=True)
+    await callback.answer()
+    configs = list(g.get("configs") or [])
+    if not configs:
+        return await callback.message.answer("هیچ کانفیگی وجود نداره.")
+    n = len(configs)
+    status = await callback.message.answer(
+        f"🔌 در حال تست واقعی {n} کانفیگ...\n"
+        f"(ممکن است تا {max(30, n * 4)} ثانیه طول بکشد)"
+    )
+    results = await probe_configs(configs)
+    if any(r.get("ok") for r in results.values()):
+        storage.set_generated_last_successful_ping(gen_id, callback.from_user.id)
+    chunks = _format_probe_lines(g["name"], configs, results)
+    await status.edit_text(chunks[0], parse_mode="HTML")
+    for chunk in chunks[1:]:
+        await callback.message.answer(chunk, parse_mode="HTML")
+
 
 @dp.callback_query(F.data.regexp(r"^sub_delete_dead:\d+$"))
 async def delete_dead_start(callback: CallbackQuery):

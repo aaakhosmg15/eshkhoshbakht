@@ -605,6 +605,7 @@ function renderSubDetail(sub) {
       <div class="action-bar">
         <button class="btn-sm btn" id="refresh-sub-btn">${icon("refresh", "icon-sm")} بروزرسانی</button>
         <button class="btn-sm btn" id="ping-sub-btn">${icon("ping", "icon-sm")} پینگ</button>
+        <button class="btn-sm btn" id="probe-sub-btn">🔌 تست واقعی</button>
         <button class="btn-sm btn" id="dead-sub-btn">${icon("broom", "icon-sm")} حذف مرده‌ها</button>
         <button class="btn-sm btn" id="export-sub-btn">${icon("export", "icon-sm")} خروجی</button>
         <button class="btn-sm btn" id="note-sub-btn">${icon("note", "icon-sm")} یادداشت</button>
@@ -628,6 +629,8 @@ function bindSubDetailEvents(sub) {
 
   const ping = document.getElementById("ping-sub-btn");
   if (ping) ping.addEventListener("click", () => pingSub(sub.id));
+  const probe = document.getElementById("probe-sub-btn");
+  if (probe) probe.addEventListener("click", () => probeSub(sub.id));
 
   const dead = document.getElementById("dead-sub-btn");
   if (dead) dead.addEventListener("click", () => previewDeadConfigs(sub));
@@ -733,6 +736,61 @@ async function pingGenerated(id) {
     toast(`پینگ تمام شد — مرتب‌سازی + برچسب سریع‌ترین — زنده: ${data.alive || 0} / مرده: ${data.dead || 0}`);
   } catch (e) { toast(e.message, true); }
 }
+
+
+async function probeSub(id) {
+  const n = (state.currentSub && state.currentSub.configs) ? state.currentSub.configs.length : "?";
+  toast(`تست واقعی ${n} کانفیگ — لطفاً صبر کن...`);
+  try {
+    const data = await api("GET", `/api/subs/${id}/probe`);
+    showProbeResults(data);
+    if (state.currentSub) {
+      state.currentSub = await api("GET", `/api/subs/${id}`);
+    }
+    render();
+  } catch (e) {
+    toast(e.message || "خطا در تست واقعی", true);
+  }
+}
+
+async function probeGenerated(id) {
+  const n = (state.currentGen && state.currentGen.configs) ? state.currentGen.configs.length : "?";
+  toast(`تست واقعی ${n} کانفیگ — لطفاً صبر کن...`);
+  try {
+    const data = await api("GET", `/api/generated/${id}/probe`);
+    showProbeResults(data);
+    if (state.currentGen) {
+      state.currentGen = await api("GET", `/api/generated/${id}`);
+      render();
+    }
+  } catch (e) {
+    toast(e.message || "خطا در تست واقعی", true);
+  }
+}
+
+function showProbeResults(data) {
+  const results = data.results || [];
+  const rows = results.map((r) => {
+    let badge;
+    if (!r.supported) badge = `<span class="badge badge-dead">غیرقابل‌تست</span>`;
+    else if (r.ok) badge = `<span class="badge badge-ping-good">${r.ms != null ? Math.round(r.ms) + " ms" : "OK"}</span>`;
+    else badge = `<span class="badge badge-dead">ناموفق</span>`;
+    const err = r.error && !r.ok ? `<span class="muted" style="font-size:0.75rem">${esc(r.error)}</span>` : "";
+    return `<div class="config-row"><span class="badge">${esc(r.protocol || "")}</span><span class="remark">${esc(r.remark || "(بدون نام)")}</span>${badge}${err}</div>`;
+  }).join("");
+  const xrayNote = data.xray === false
+    ? `<p class="muted" style="color:#f66">هسته Xray روی سرور نیست — Dockerfile جدید را دیپلوی کن.</p>`
+    : "";
+  openModal(`
+    <h2>🔌 نتیجه تست واقعی</h2>
+    <p class="muted">زنده: <b>${data.alive || 0}</b> · مرده: <b>${data.dead || 0}</b> · غیرقابل‌تست: <b>${data.unsupported || 0}</b> از ${data.total || 0}</p>
+    ${xrayNote}
+    <div style="max-height:50vh;overflow:auto;margin-top:10px">${rows || "<p class='muted'>نتیجه‌ای نیست</p>"}</div>
+    <div class="modal-actions"><button class="btn" id="probe-close">بستن</button></div>
+  `);
+  document.getElementById("probe-close").addEventListener("click", closeModal);
+}
+
 
 function showPingChart(results, alive, dead, total) {
   const maxMs = Math.max(1, ...results.filter((r) => r.ms != null).map((r) => r.ms));
@@ -1118,6 +1176,8 @@ function renderGenDetail(gen) {
     if (custBtn) custBtn.addEventListener("click", () => openCustomerMessage(gen));
     const pingGen = document.getElementById("ping-gen-btn");
     if (pingGen) pingGen.addEventListener("click", () => pingGenerated(gen.id));
+    const probeGen = document.getElementById("probe-gen-btn");
+    if (probeGen) probeGen.addEventListener("click", () => probeGenerated(gen.id));
     app.querySelectorAll("[data-gen-rename]").forEach((btn) => {
       btn.addEventListener("click", () => openRenameGenConfig(gen, parseInt(btn.dataset.genRename)));
     });
@@ -1190,6 +1250,7 @@ function renderGenDetail(gen) {
       <div class="action-bar">
         <button class="btn-sm btn" id="copy-gen-url">${icon("copy", "icon-sm")} کپی لینک</button>
         <button class="btn-sm btn" id="ping-gen-btn">${icon("ping", "icon-sm")} پینگ</button>
+        <button class="btn-sm btn" id="probe-gen-btn">🔌 تست واقعی</button>
         <button class="btn-sm btn" id="change-expiry-btn">⏰ تغییر انقضا</button>
         <button class="btn-sm btn" id="edit-gen-note-btn">📝 یادداشت</button>
         <button class="btn-sm btn" id="cust-msg-btn">📢 پیام مشتری</button>

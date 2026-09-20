@@ -23,6 +23,7 @@ from config_parser import (
     rename_config,
 )
 from pinger import ping_configs
+from prober import probe_configs, format_probe_summary, xray_available
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 
@@ -798,6 +799,81 @@ async def api_pin_gen_config(request: web.Request) -> web.Response:
     return web.json_response(data)
 
 
+
+async def api_probe_sub(request: web.Request) -> web.Response:
+    """تست واقعی اتصال برای اشتراک عادی."""
+    try:
+        sub_id = int(request.match_info["sub_id"])
+    except (KeyError, ValueError):
+        return web.json_response({"error": "invalid id"}, status=400)
+    sub = storage.get_sub(sub_id, request["user_id"])
+    if not sub:
+        return web.json_response({"error": "not found"}, status=404)
+    configs = list(sub.get("configs") or [])
+    results = await probe_configs(configs)
+    alive, dead, unsup = format_probe_summary(results)
+    if alive:
+        storage.set_sub_last_successful_ping(sub_id, request["user_id"])
+    payload = []
+    for i, raw in enumerate(configs):
+        r = results.get(i) or {}
+        payload.append({
+            "index": i,
+            "protocol": r.get("protocol") or get_protocol(raw),
+            "remark": r.get("remark") or get_remark(raw) or "",
+            "ok": bool(r.get("ok")),
+            "ms": r.get("ms"),
+            "error": r.get("error") or "",
+            "supported": r.get("supported", True),
+        })
+    return web.json_response({
+        "results": payload,
+        "alive": alive,
+        "dead": dead,
+        "unsupported": unsup,
+        "total": len(configs),
+        "xray": xray_available(),
+    })
+
+
+async def api_probe_generated(request: web.Request) -> web.Response:
+    """تست واقعی اتصال برای اشتراک سفارشی."""
+    try:
+        gen_id = int(request.match_info["gen_id"])
+    except (KeyError, ValueError):
+        return web.json_response({"error": "invalid id"}, status=400)
+    gen = storage.get_generated_by_id(gen_id, request["user_id"])
+    if not gen:
+        return web.json_response({"error": "not found"}, status=404)
+    # همان لیست ذخیره‌شده — بدون resolve قبل از تست
+    configs = list(gen.get("configs") or [])
+    results = await probe_configs(configs)
+    alive, dead, unsup = format_probe_summary(results)
+    if alive:
+        storage.set_generated_last_successful_ping(gen_id, request["user_id"])
+    payload = []
+    for i, raw in enumerate(configs):
+        r = results.get(i) or {}
+        payload.append({
+            "index": i,
+            "protocol": r.get("protocol") or get_protocol(raw),
+            "remark": r.get("remark") or get_remark(raw) or "",
+            "ok": bool(r.get("ok")),
+            "ms": r.get("ms"),
+            "error": r.get("error") or "",
+            "supported": r.get("supported", True),
+        })
+    return web.json_response({
+        "results": payload,
+        "alive": alive,
+        "dead": dead,
+        "unsupported": unsup,
+        "total": len(configs),
+        "xray": xray_available(),
+    })
+
+
+
 def add_routes(app: web.Application) -> None:
     app.router.add_get("/api/subs", api_list_subs)
     app.router.add_post("/api/subs", api_add_sub)
@@ -808,6 +884,8 @@ def add_routes(app: web.Application) -> None:
     app.router.add_get("/api/subs/{sub_id}/export", api_export_sub)
     app.router.add_post("/api/subs/{sub_id}/configs/{idx}/rename", api_rename_config)
     app.router.add_get("/api/subs/{sub_id}/ping", api_ping_sub)
+    app.router.add_get("/api/subs/{sub_id}/probe", api_probe_sub)
+    app.router.add_get("/api/generated/{gen_id}/probe", api_probe_generated)
     app.router.add_get("/api/generated/{gen_id}/ping", api_ping_generated)
     app.router.add_post("/api/subs/{sub_id}/delete-dead", api_delete_dead)
     app.router.add_post("/api/build-custom", api_build_custom)
